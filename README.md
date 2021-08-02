@@ -13,5 +13,7 @@ line 220 fix the error
 line 411 add an option to determine the channels need to be analysed  
 line 448-465 I add 17 channels   
 line 471 I add an if to judge if it is a chaanel  
-line 555 change the condition to judge whether the channels need analyse I think the channels you don't want to analyse is triggers  
-534
+line 576 change the condition to judge whether the channels need analyse I think the channels you don't want to analyse is triggers  
+line 606 chage the condition 
+line 628 a new comment 
+line 682 change the condition
