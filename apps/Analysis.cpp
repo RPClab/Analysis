@@ -32,7 +32,37 @@ namespace fs = std::filesystem;
 #include <sys/ioctl.h>
 #endif // Windows/Linux
 
+int istrigger(int ch, std::vector<int>& triggers)
+{
+  int i=0;
+  int result=0;
+  for(i=0;i<triggers.size();i++)
+  {
+    if(ch==triggers[i])
+    {
+      result=1;
+      break;
+    }
+  }
+  return result;
+  
+}
 
+int ischannel(int ch, std::vector<int>& analysedchannels)
+{
+  int i=0;
+  int result=0;
+  for(i=0;i<analysedchannels.size();i++)
+  {
+    if(ch==analysedchannels[i])
+    {
+      result=1;
+      break;
+    }
+  }
+  return result;
+}
+ 
 void Clear()
 {
   #if defined _WIN32
@@ -187,7 +217,7 @@ std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& 
   std::size_t begin_{0};
   std::size_t end_{channel.Data.size()};
   if(begin>0) begin_=begin;
-  if(end!=-1||end<=channel.Data.size()) end_= end;
+  if(end!=-1&&end<=channel.Data.size()) end_= end;
   for(std::size_t j = begin_; j != end_; ++j)
   {
     if(channel.Data[j]>max)
@@ -377,6 +407,9 @@ int main(int argc, char** argv)
 
   double NbrSigma=5.0;
   app.add_option("--sigma", NbrSigma, "Number of sigma above the mean noise");
+  
+  std::vector<int> analysedchannels{0,1,2,3,4,5,6,7,9,10,11,12,13,14,15,16}
+  app.add_option("--analysed", analysedchannels," channels want to be analysed");
 
   try
   {
@@ -439,22 +472,25 @@ int main(int argc, char** argv)
   channels.activateChannel(5, "N");
   channels.activateChannel(6, "N");
   channels.activateChannel(7, "N");
- // channels.activateChannel(8, "N");
- /* channels.activateChannel(9, "N");
+  channels.activateChannel(8, "N");
+  channels.activateChannel(9, "N");
   channels.activateChannel(10, "N");
   channels.activateChannel(11, "N");
   channels.activateChannel(12, "N");
   channels.activateChannel(13, "N");
   channels.activateChannel(14, "N");
   channels.activateChannel(15, "N");
-  channels.activateChannel(16, "N");*/
+  channels.activateChannel(16, "N");
 
 
   std::map<int,TH1D> mins;
   for(auto channel : channels.getChannels())
   {
-    mins[channel.first]=TH1D("min position distribution","min position distribution",1024,0,1024);
-    std::cout<<"*****"<<channel.first<<std::endl;
+   if(!istrigger(channel.first,triggers))
+    {
+      mins[channel.first]=TH1D("min position distribution","min position distribution",1024,0,1024);
+      std::cout<<"*****"<<channel.first<<std::endl;
+    }  
   }
 
 
@@ -493,7 +529,7 @@ int main(int argc, char** argv)
 
 
     event->clear();
-    Run->GetEntry(evt);
+    Run->GetEntry(evt); 
 
     std::vector<TH1D> Plots(event->Channels.size());
     float min=+9999.0;
@@ -537,7 +573,7 @@ int main(int argc, char** argv)
     double delta_t_new{0};
     for(unsigned int ch = 0; ch != event->Channels.size(); ++ch)
     {
-      if(channels.DontAnalyseIt(ch)) continue;  // Data for channel X is in file but i dont give a *** to analyse it !
+      if(istrigger(ch,triggers)) continue;  // Data for channel X is in file but i dont give a *** to analyse it !   maybe there need to be discussed
 
 
 
@@ -569,7 +605,7 @@ int main(int argc, char** argv)
 
       ///BAD PLEASE FIX THIS !!!
       std::pair<int,int> SignalWindow2;
-      if(ch<=8)
+      if(ischannel(ch,analysedchannels))
       {
         SignalWindow2.first=trigger_ticks[8]-SignalWindow.second-SignalWindow.first/2;
         SignalWindow2.second=trigger_ticks[8]-SignalWindow.second+SignalWindow.first/2;
@@ -589,7 +625,7 @@ int main(int argc, char** argv)
        */
       std::pair<std::pair<double,int>,std::pair<double,int>> min_max=getMinMax(event->Channels[ch]);
       mins[ch].Fill(trigger_ticks[8]-min_max.first.second);
-      total.Fill(trigger_ticks[8]-min_max.first.second);
+      total.Fill(trigger_ticks[8]-min_max.first.second); //maybe need to be modified when there are more triggers
       /*
        *
        *
@@ -643,7 +679,7 @@ int main(int argc, char** argv)
       Plots[ch].GetYaxis()->SetLabelSize(0.07);
       Plots[ch].SetStats();
       Plots[ch].SetTitle(";");
-      if(ch==7)
+      if(ch==analysedchannels.back()) //maybe some problem
       {
 
 
@@ -675,7 +711,7 @@ int main(int argc, char** argv)
 
       event_min.SetLineStyle(5);
       event_min.SetLineColor(kRed);
-      event_min.DrawLine(0,min_max.first.second,1024,min_max.first.second);
+      event_min.DrawLine(0,min_max.first.second,1024,min_max.first.second);  //there may be a problem, if you want to draw a line to show the minmum, the parameter should be min_max.first.first
 
       //Mean noise
       event_min.SetLineColor(46);
