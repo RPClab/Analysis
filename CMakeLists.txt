@@ -1,15 +1,15 @@
-cmake_minimum_required(VERSION 3.16...3.19.2 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16...3.21.1)
 
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}"
                       "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(GetCMakeMM)
 
-cmmm(VERSION "1.1" REPOSITORY "flagarde/CMakeMM" PROVIDER "gitlab" VERBOSITY VERBOSE DESTINATION "CMakeMM")
+cmmm(VERSION "2.0" REPOSITORY "flagarde/CMakeMM" PROVIDER "gitlab" VERBOSITY VERBOSE)
 
 project(RPCAnalysis VERSION "1.0.0.0" DESCRIPTION "Analysis code for RPClab" HOMEPAGE_URL "https://github.com/RPClab" LANGUAGES CXX)
 
-cmmm_modules_list(REPOSITORY "flagarde/CMakeCM" PROVIDER "gitlab" DESTINATION "Modules" BRANCH "main")
+cmmm_modules_list(REPOSITORY "flagarde/CMakeCM" PROVIDER "gitlab")
 
 include(PreventInSourceBuilds)
 prevent_in_source_builds()

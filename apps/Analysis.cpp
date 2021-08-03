@@ -350,9 +350,9 @@ int main(int argc, char** argv)
   std::string file{""};
   app.add_option("-f,--file", file, "Name of the file to process")->required()->check(CLI::ExistingFile);
   int NbrEvents{0};
-  app.add_option("-e,--events", NbrEvents, "Number of event to process", 0)->check(CLI::PositiveNumber);
+  app.add_option("-e,--events", NbrEvents, "Number of event to process")->check(CLI::PositiveNumber);
   std::string nameTree{"Tree"};
-  app.add_option("-t,--tree", nameTree, "Name of the TTree", "Tree");
+  app.add_option("-t,--tree", nameTree, "Name of the TTree");
   std::pair<double, double> SignalWindow;
   app.add_option("-s,--signal", SignalWindow, "Width of the signal windows, delay between signal and trigger")->required()->type_size(2);
   std::pair<double, double> NoiseWindow;
@@ -476,6 +476,15 @@ int main(int argc, char** argv)
   // std::vector<TH1D> Verif;
   std::map<int, int> Efficiency;
   TCanvas can("","",1280,720);
+
+
+  // Initialize multiplicity
+  std::vector<float> Multiplicity;
+  for(std::size_t i=0;i!=NumberChambers;++i)
+  {
+    Multiplicity.push_back(0.);
+  }
+
 
   int event_skip1{-1};
   int event_skip2{-1};
@@ -613,7 +622,8 @@ int main(int argc, char** argv)
       if(hasseensomething == true)
       {
         good = true;
-
+        //FIXME add the chamber ability;
+        Multiplicity[0]++;
         //hasseensomething=true;
         Plots[ch].SetLineColor(4);
         //waveform.Scale(1.0 / 4096);
@@ -767,7 +777,7 @@ int main(int argc, char** argv)
 
   float efficiency=good_stack * 1.00 / (NbrEvents * scalefactor);
   float efficiency_corrected=good_stack_corrected * 1.00 / (total_event * scalefactor);
-  std::cout << "Chamber efficiency " << efficiency << " +-" <<std::sqrt(efficiency*(1-efficiency)/NbrEvents)<<" with signal "<<good_stack<<" total event "<< NbrEvents<<std::endl;
+  std::cout << "Chamber efficiency " << efficiency << " +-" <<std::sqrt(efficiency*(1-efficiency)/NbrEvents)<<" with signal "<<good_stack<<" total event "<< NbrEvents<<" Multiplicity"<< Multiplicity[0]/good_stack<< std::endl;
   std::cout << "Chamber efficiency corrected " << efficiency_corrected << " +-" <<std::sqrt(efficiency_corrected*(1-efficiency_corrected)/total_event)<<" with signal "<<good_stack_corrected<<" total event "<< total_event <<std::endl;
 
   std::cout<< "Number event analysed " << total_event*100.0/NbrEvents <<std::endl;
