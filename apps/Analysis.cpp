@@ -419,14 +419,12 @@ int main(int argc, char** argv)
   TFile fileIn(file.c_str());
   if(fileIn.IsZombie())
   {
-    std::cout << "File Not Opened" << std::endl;
-    std::exit(-3);
+    throw "File Not Opened";
   }
   TTree* Run = static_cast<TTree*>(fileIn.Get(nameTree.c_str()));
   if(Run == nullptr || Run->IsZombie())
   {
-    std::cout << "Problem Opening TTree \"Tree\" !!!" << std::endl;
-    std::exit(-4);
+    throw "Problem Opening TTree \"Tree\" !!!";
   }
 
   double   scalefactor = 1.0;
@@ -468,8 +466,7 @@ int main(int argc, char** argv)
   bool   hasseensomething{false};
   if(Run->SetBranchAddress("Events", &event))
   {
-    std::cout << "Error while SetBranchAddress !!!" << std::endl;
-    std::exit(-5);
+    throw "Error while SetBranchAddress !!!";
   }
 
 
