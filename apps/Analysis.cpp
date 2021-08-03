@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 #include <filesystem>
+#include <limits>
 namespace fs = std::filesystem;
 
 #include "fmt/color.h"
@@ -162,8 +163,8 @@ TH1D CreateAndFillWaveform(const int& eventNbr, const Channel& channel, const st
 
 void SupressBaseLine(Channel& channel)
 {
-  double min=9999.;
-  double max=-9999.;
+  double min{std::numeric_limits<double>::max()};
+  double max{std::numeric_limits<double>::min()};
   double meanwindows{0};
   int bin{0};
   for(std::size_t j = 0; j != channel.Data.size(); ++j)
@@ -180,10 +181,11 @@ void SupressBaseLine(Channel& channel)
 
 std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& channel,const int& begin=-1,const int& end=-1)
 {
-  double max=-1.0;
-  int tick_max=0;
-  int tick_min=0;
-  double min=999.0;
+
+  int tick_max{0};
+  int tick_min{0};
+  double min{std::numeric_limits<double>::max()};
+  double max{std::numeric_limits<double>::min()};
   std::size_t begin_{0};
   std::size_t end_{channel.Data.size()};
   if(begin>0) begin_=begin;
@@ -206,7 +208,7 @@ std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& 
 
 double getAbsMax(const Channel& channel)
 {
-  double max=-1.0;
+  double max{std::numeric_limits<double>::min()};
   for(std::size_t j = 0; j != channel.Data.size(); ++j)
   {
     if(std::fabs(channel.Data[j])>max) max=std::fabs(channel.Data[j]);
