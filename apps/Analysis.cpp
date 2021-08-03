@@ -505,8 +505,8 @@ int main(int argc, char** argv)
     Run->GetEntry(evt);
 
     std::vector<TH1D> Plots(event->Channels.size());
-    float min=+9999.0;
-    float max=-9999.0;
+    float min{std::numeric_limits<float>::max()};
+    float max{std::numeric_limits<float>::min()};
     // First loop on triggers
     for(unsigned int ch = 0; ch != event->Channels.size(); ++ch)
     {
