@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 #include <filesystem>
+#include <limits>
 namespace fs = std::filesystem;
 
 #include "fmt/color.h"
@@ -192,8 +193,8 @@ TH1D CreateAndFillWaveform(const int& eventNbr, const Channel& channel, const st
 
 void SupressBaseLine(Channel& channel)
 {
-  double min=9999.;
-  double max=-9999.;
+  double min{std::numeric_limits<double>::max()};
+  double max{std::numeric_limits<double>::min()};
   double meanwindows{0};
   int bin{0};
   for(std::size_t j = 0; j != channel.Data.size(); ++j)
@@ -210,10 +211,11 @@ void SupressBaseLine(Channel& channel)
 
 std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& channel,const int& begin=-1,const int& end=-1)
 {
-  double max=-1.0;
-  int tick_max=0;
-  int tick_min=0;
-  double min=999.0;
+
+  int tick_max{0};
+  int tick_min{0};
+  double min{std::numeric_limits<double>::max()};
+  double max{std::numeric_limits<double>::min()};
   std::size_t begin_{0};
   std::size_t end_{channel.Data.size()};
   if(begin>0) begin_=begin;
@@ -236,7 +238,7 @@ std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& 
 
 double getAbsMax(const Channel& channel)
 {
-  double max=-1.0;
+  double max{std::numeric_limits<double>::min()};
   for(std::size_t j = 0; j != channel.Data.size(); ++j)
   {
     if(std::fabs(channel.Data[j])>max) max=std::fabs(channel.Data[j]);
@@ -380,9 +382,9 @@ int main(int argc, char** argv)
   std::string file{""};
   app.add_option("-f,--file", file, "Name of the file to process")->required()->check(CLI::ExistingFile);
   int NbrEvents{0};
-  app.add_option("-e,--events", NbrEvents, "Number of event to process", 0)->check(CLI::PositiveNumber);
+  app.add_option("-e,--events", NbrEvents, "Number of event to process")->check(CLI::PositiveNumber);
   std::string nameTree{"Tree"};
-  app.add_option("-t,--tree", nameTree, "Name of the TTree", "Tree");
+  app.add_option("-t,--tree", nameTree, "Name of the TTree");
   std::pair<double, double> SignalWindow;
   app.add_option("-s,--signal", SignalWindow, "Width of the signal windows, delay between signal and trigger")->required()->type_size(2);
   std::pair<double, double> NoiseWindow;
@@ -452,14 +454,12 @@ int main(int argc, char** argv)
   TFile fileIn(file.c_str());
   if(fileIn.IsZombie())
   {
-    std::cout << "File Not Opened" << std::endl;
-    std::exit(-3);
+    throw "File Not Opened";
   }
   TTree* Run = static_cast<TTree*>(fileIn.Get(nameTree.c_str()));
   if(Run == nullptr || Run->IsZombie())
   {
-    std::cout << "Problem Opening TTree \"Tree\" !!!" << std::endl;
-    std::exit(-4);
+    throw "Problem Opening TTree \"Tree\" !!!";
   }
 
   double   scalefactor = 1.0;
@@ -504,14 +504,22 @@ int main(int argc, char** argv)
   bool   hasseensomething{false};
   if(Run->SetBranchAddress("Events", &event))
   {
-    std::cout << "Error while SetBranchAddress !!!" << std::endl;
-    std::exit(-5);
+    throw "Error while SetBranchAddress !!!";
   }
 
 
   // std::vector<TH1D> Verif;
   std::map<int, int> Efficiency;
   TCanvas can("","",1280,720);
+
+
+  // Initialize multiplicity
+  std::vector<float> Multiplicity;
+  for(std::size_t i=0;i!=NumberChambers;++i)
+  {
+    Multiplicity.push_back(0.);
+  }
+
 
   int event_skip1{-1};
   int event_skip2{-1};
@@ -532,8 +540,8 @@ int main(int argc, char** argv)
     Run->GetEntry(evt); 
 
     std::vector<TH1D> Plots(event->Channels.size());
-    float min=+9999.0;
-    float max=-9999.0;
+    float min{std::numeric_limits<float>::max()};
+    float max{std::numeric_limits<float>::min()};
     // First loop on triggers
     for(unsigned int ch = 0; ch != event->Channels.size(); ++ch)
     {
@@ -649,7 +657,8 @@ int main(int argc, char** argv)
       if(hasseensomething == true)
       {
         good = true;
-
+        //FIXME add the chamber ability;
+        Multiplicity[0]++;
         //hasseensomething=true;
         Plots[ch].SetLineColor(4);
         //waveform.Scale(1.0 / 4096);
@@ -803,7 +812,7 @@ int main(int argc, char** argv)
 
   float efficiency=good_stack * 1.00 / (NbrEvents * scalefactor);
   float efficiency_corrected=good_stack_corrected * 1.00 / (total_event * scalefactor);
-  std::cout << "Chamber efficiency " << efficiency << " +-" <<std::sqrt(efficiency*(1-efficiency)/NbrEvents)<<" with signal "<<good_stack<<" total event "<< NbrEvents<<std::endl;
+  std::cout << "Chamber efficiency " << efficiency << " +-" <<std::sqrt(efficiency*(1-efficiency)/NbrEvents)<<" with signal "<<good_stack<<" total event "<< NbrEvents<<" Multiplicity"<< Multiplicity[0]/good_stack<< std::endl;
   std::cout << "Chamber efficiency corrected " << efficiency_corrected << " +-" <<std::sqrt(efficiency_corrected*(1-efficiency_corrected)/total_event)<<" with signal "<<good_stack_corrected<<" total event "<< total_event <<std::endl;
 
   std::cout<< "Number event analysed " << total_event*100.0/NbrEvents <<std::endl;
