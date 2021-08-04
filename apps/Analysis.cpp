@@ -20,10 +20,122 @@
 #include <vector>
 #include <filesystem>
 #include <limits>
+
+#include "TApplication.h"
 namespace fs = std::filesystem;
 
 #include "fmt/color.h"
 
+enum class Polarity
+{
+  Positive=1,
+  Negative=-1,
+  Unknown=0,
+};
+
+namespace Analysis
+{
+  class Channel
+  {
+  public:
+    Channel(const int& id,const int& number,const int& chamber,const Polarity& polarity) : m_ID(id),m_Number(number), m_Chamber(chamber), m_Polarity(polarity)
+    {
+
+    }
+    void setNumber(const int& ch)
+    {
+      m_Number=ch;
+    }
+    int getNumber() const
+    {
+      return m_Number;
+    }
+    void setID(const int& id)
+    {
+      m_ID=id;
+    }
+    // The channel number from the digitizer point of view
+    int getID() const
+    {
+      return m_ID;
+    }
+    int getSignPolarity() const
+    {
+      if(m_Polarity==Polarity::Negative) return -1;
+      else return +1;
+    }
+    void setPolarity(const Polarity& polarity)
+    {
+      m_Polarity=polarity;
+    }
+    Polarity getPolarity()
+    {
+      return m_Polarity;
+    }
+    void setOnChamber(const int& chamber)
+    {
+      m_Chamber=chamber;
+    }
+    int getOnChamber() const
+    {
+      return m_Chamber;
+    }
+  private:
+    Polarity m_Polarity{Polarity::Negative};
+    int m_Chamber{-1};
+    int m_ID{-1};
+    int m_Number{-1};
+  };
+
+
+  //
+  class Channels
+  {
+  public:
+    void insert(const int& id,const int& Number,const int& chamber,const Polarity& polarity)
+    {
+      Channels.emplace(id,Channel(id,Number,chamber,polarity));
+    }
+    std::size_t getNumberChannels()
+    {
+      return Channels.size();
+    }
+    const Analysis::Channel& getChannel(const std::size_t& id) const
+    {
+      return Channels.at(id);
+    }
+    void print()
+    {
+      fmt::print("{} channels will be analysed :\n",Channels.size());
+      for(std::map<int,Analysis::Channel>::iterator it= Channels.begin(); it!=Channels.end(); ++it)
+      {
+        fmt::print("\t * ID: {}, channel {}, with polarity {}, in chamber {}\n",it->second.getID(),it->second.getNumber(),it->second.getPolarity(),it->second.getOnChamber());
+      }
+    }
+    bool hasToBeAnalysed(const int& ch)
+    {
+      if(Channels.find(ch) != Channels.end()) return true;
+      else return false;
+    }
+    std::map<int,Analysis::Channel> get()
+    {
+      return Channels;
+    }
+    int getNumberChannelActivatedForChamber(const int& chamber)
+    {
+      int number{0};
+      for(std::map<int,Analysis::Channel>::iterator it=Channels.begin();it!=Channels.end();++it)
+      {
+        if(it->second.getOnChamber()==chamber) number++;
+      }
+      return number;
+    }
+  private:
+    //In file the channels in sequence 0...N
+    std::map<int,Analysis::Channel> Channels;
+  };
+
+}
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -120,7 +232,7 @@ private:
   PositiveNegative m_PN;
 };
 
-class Channels
+/*class Channels
 {
 public:
   std::size_t getNumberOfChannelActivated() { return m_Channel.size(); }
@@ -146,12 +258,22 @@ public:
   }
 private:
   std::map<int, channel> m_Channel;
-};
+};*/
+
+int findWichTrigger(const int& channel,const std::vector<int>& triggers)
+{
+  for(std::size_t i=0;i!=triggers.size();++i)
+  {
+    if(channel<triggers[i]) return triggers[i];
+  }
+  //Should never go there
+  return -1;
+}
 
 TH1D CreateAndFillWaveform(const int& eventNbr, const Channel& channel, const std::string& name = "", const std::string title = "")
 {
-  std::string my_name  = name + " channel " + std::to_string(int(channel.Number));
-  std::string my_title = title + " channel " + std::to_string(int(channel.Number));
+  std::string my_name  = name + " channel " + std::to_string(int(channel.Group*8+channel.Number));
+  std::string my_title = title + " channel " + std::to_string(int(channel.Group*8+channel.Number));
   TH1D        th1(my_title.c_str(), my_name.c_str(), channel.Data.size(), 0, channel.Data.size());
   for(std::size_t i = 0; i != channel.Data.size(); ++i)
   {th1.Fill(i, channel.Data[i]);}
@@ -270,7 +392,7 @@ std::pair<std::pair<double, double>, std::pair<double, double>> MeanSTD(const Ch
   return std::pair<std::pair<double, double>, std::pair<double, double>>(noise, signal);
 }
 
-class Chamber
+/*class Chamber
 {
 public:
   void   activateChannel(const int& chn, const std::string& PN) { m_Channels.activateChannel(chn, PN); }
@@ -282,9 +404,9 @@ private:
   int      m_NumberFired{0};
   int      m_Total{0};
   Channels m_Channels;
-};
+};*/
 
-class Plotter
+/*class Plotter
 {
 public:
   void addType(const std::string& type)
@@ -301,7 +423,8 @@ public:
   }
 private:
   std::map<std::string,std::vector<std::vector<TH1F>>> m_Plots;
-};
+};*/
+
 /*
  * TH1D CreateSelectionPlot(const TH1D& th)
  * {
@@ -314,12 +437,75 @@ private:
  *    return std::move(selected);
  * }*/
 
-enum class Polarity
+class EventViewer
 {
-  Positive=1,
-  Negative=-1,
-  Unknown=0,
+public:
+  EventViewer(const std::string& name="",const std::string& title="")
+  {
+    m_Canvas = new TCanvas(name.c_str(),title.c_str(),m_PositionCanvasX,m_PositionCanvasY,m_CanvasX,m_CanvasY);
+    m_Canvas->cd();
+    m_Pad = new TPad("","",0.,0.,1.,1.);
+    //m_PaveLabel = new TPaveLabel(0.01, 0.96, 0.99, 0.99,m_PaveTitle.c_str());
+    //m_PaveLabel->Draw();
+    m_Pad->Draw();
+  }
+  ~EventViewer()
+  {
+    /*if(m_PaveLabel!=nullptr) delete m_PaveLabel;
+    if(m_Pad!=nullptr) delete m_Pad;
+    if(m_Canvas!=nullptr) delete m_Canvas;*/
+  }
+  void setPaveLabel(const std::string& title)
+  {
+    m_PaveLabel->SetLabel(title.c_str());
+    m_PaveLabel->Draw();
+  }
+  void setCanvasName(const std::string& title)
+  {
+    m_Canvas->SetName(title.c_str());
+  }
+  void setCanvasTitle(const std::string& title)
+  {
+    m_Canvas->SetTitle(title.c_str());
+  }
+  void divide(const int& div)
+  {
+    m_Pad->Divide(1,div,0,0);
+  }
+  void cd(const int& id)
+  {
+    m_Pad->cd(id);
+  }
+  void cdNext()
+  {
+    m_cd++;
+    m_Pad->cd(m_cd);
+  }
+  void reset()
+  {
+    m_cd=0;
+  }
+
+  void saveAs(const std::string& filename)
+  {
+    m_Canvas->SaveAs(filename.c_str());
+  }
+private:
+  TCanvas* m_Canvas{nullptr};
+  TPad* m_Pad{nullptr};
+  TPaveLabel* m_PaveLabel{nullptr};
+  std::string m_PaveTitle;
+  static int m_CanvasX;
+  static int m_CanvasY;
+  static int m_PositionCanvasX;
+  static int m_PositionCanvasY;
+  int m_cd{0};
 };
+
+int EventViewer::m_CanvasX =1200;
+int EventViewer::m_CanvasY =1200;
+int EventViewer::m_PositionCanvasX =0;
+int EventViewer::m_PositionCanvasY =0;
 
 int GetTickTrigger(const Channel& channel,const double& percent,const Polarity& polarity)
 {
@@ -345,8 +531,11 @@ int GetTickTrigger(const Channel& channel,const double& percent,const Polarity& 
 
 int main(int argc, char** argv)
 {
-  gStyle->SetOptStat(0);
-  gErrorIgnoreLevel = kWarning;
+  //gStyle->SetOptStat(0);
+  gROOT->SetStyle("ATLAS");
+  gROOT->ForceStyle();
+
+  gErrorIgnoreLevel={kWarning};
   int width=0, height=0;
   CLI::App    app{"Analysis"};
   std::string file{""};
@@ -365,12 +554,17 @@ int main(int argc, char** argv)
   app.add_option("--sigmaNoise", NbrSigmaNoise, "NbrSigmaNoise");
 
 
-
   int NumberChambers{0};
   app.add_option("-c,--chambers", NumberChambers, "Number of chamber(s)")->check(CLI::PositiveNumber)->required();
-  std::vector<int> distribution;
+  //From MaftyNaveyuErin
+  //By default we used only 8 channels so keep this behaviour
+  std::vector<int> analysedchannels{0,1,2,3,4,5,6,7};
+  app.add_option("--analysed", analysedchannels,"Channels want to be analysed");
+  //By defaut all 8 channels are in one chamber
+  std::vector<int> distribution{0,0,0,0,0,0,0,0};
   app.add_option("-d,--distribution", distribution, "Channel is in wich chamber start at 0 and -1 if not connected")->required();
-  std::vector<std::string> polarity;
+  //By defaut all 8 channels have Negative polarity
+  std::vector<int> polarity{-1,-1,-1,-1,-1,-1,-1,-1};
   app.add_option("-p,--polarity", polarity, "Polarity of the signal Positive,+,Negative,-")->required();
   std::vector<int> triggers{8,17,26,35};
   app.add_option("--triggers", triggers, "Channels used as trigger 8,17,26,35 by default");
@@ -388,6 +582,34 @@ int main(int argc, char** argv)
   {
     return app.exit(e);
   }
+
+  //Perform some check to avoid problem
+  if(analysedchannels.size()==distribution.size() && distribution.size() == polarity.size());
+  else throw "analysed, distribution and polarity don't hve the smae number or argument !";
+
+  Analysis::Channels channels;
+  for(std::size_t ch=0; ch!=analysedchannels.size();++ch)
+  {
+    static int ID{0};
+    //If channel is a trigger thn add 1 (the user want the next channel not the trigger)
+    if(std::find(triggers.begin(), triggers.end(), ch)!=triggers.end()) ID++;
+    channels.insert(ID,ch,distribution[ch],static_cast<Polarity>(polarity[ch]));
+    ID++;
+  }
+
+
+  //Map for TGraph
+  std::map<int,EventViewer> eventViewers;
+  //Create the graph for chambers
+  for(std::size_t i=0;i!=NumberChambers;++i)
+  {
+    eventViewers[i]=EventViewer();
+    eventViewers[i].divide(channels.getNumberChannelActivatedForChamber(i));
+  }
+
+
+
+  channels.print();
 
   // Create Directory
   std::string folder{"Results/"+std::string(fs::path(file).stem())};
@@ -409,13 +631,6 @@ int main(int argc, char** argv)
   TH1D delta_t("delta_T","delta_T",100,0,10);
   TH1D delta_T_not_event("delta_T_not_even","delta_T_not_even",100,0,10);
   TH1D delta_T_noisy("delta_T_noisy","delta_T_noisy",100,0,10);
-  /**************************/
-  /* Initialize the plotter */
-  /**************************/
-  Plotter plotter;
-  // We want two type channels and triggers
-  plotter.addType("Channels");
-  plotter.addType("Triggers");
 
   //Open The file
   TFile fileIn(file.c_str());
@@ -430,37 +645,17 @@ int main(int argc, char** argv)
   }
 
   double   scalefactor = 1.0;
-  Channels channels;
-  channels.activateChannel(0, "N");
-  channels.activateChannel(1, "N");
-  channels.activateChannel(2, "N");
-  channels.activateChannel(3, "N");
-  channels.activateChannel(4, "N");
-  channels.activateChannel(5, "N");
-  channels.activateChannel(6, "N");
-  channels.activateChannel(7, "N");
- // channels.activateChannel(8, "N");
- /* channels.activateChannel(9, "N");
-  channels.activateChannel(10, "N");
-  channels.activateChannel(11, "N");
-  channels.activateChannel(12, "N");
-  channels.activateChannel(13, "N");
-  channels.activateChannel(14, "N");
-  channels.activateChannel(15, "N");
-  channels.activateChannel(16, "N");*/
-
 
   std::map<int,TH1D> mins;
-  for(auto channel : channels.getChannels())
+  for(auto channel : channels.get())
   {
     mins[channel.first]=TH1D("min position distribution","min position distribution",1024,0,1024);
-    std::cout<<"*****"<<channel.first<<std::endl;
   }
 
 
   Long64_t NEntries = Run->GetEntries();
   NbrEvents         = NbrEventToProcess(NbrEvents, NEntries);
-  channels.print();
+  //channels.print();
   Event* event{nullptr};
   int    good_stack{0};
   int    good_stack_corrected{0};
@@ -474,8 +669,8 @@ int main(int argc, char** argv)
 
   // std::vector<TH1D> Verif;
   std::map<int, int> Efficiency;
-  TCanvas can("","",1280,720);
-
+  TCanvas can("","",1280,1280);
+  can.UseCurrentStyle();
 
   // Initialize multiplicity
   std::vector<float> Multiplicity;
@@ -490,6 +685,11 @@ int main(int argc, char** argv)
   int total_event{0};
   for(Long64_t evt = 0; evt < NbrEvents; ++evt)
   {
+
+    for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
+    {
+      it->second.reset();
+    }
     get_terminal_size(width, height);
     fmt::print(fg(fmt::color::orange) | fmt::emphasis::bold,"┌{0:─^{2}}┐\n"
                                                             "│{1: ^{2}}│\n"
@@ -539,14 +739,19 @@ int main(int argc, char** argv)
     TPad graphPad("Graphs","Graphs",0.01,0.01,0.995,0.96);
     graphPad.Draw();
     graphPad.cd();
-    graphPad.Divide(1,8,0.,0.);
+
+
+
+
+    std::cout<<"******"<<channels.getNumberChannels()<<std::endl;
+    graphPad.Divide(1,channels.getNumberChannels(),0.,0.);
 
     double delta_t_last{0};
     double delta_t_new{0};
     for(unsigned int ch = 0; ch != event->Channels.size(); ++ch)
     {
-      if(channels.DontAnalyseIt(ch)) continue;  // Data for channel X is in file but i dont give a *** to analyse it !
-
+      if(!channels.hasToBeAnalysed(ch)) continue;  // Data for channel X is in file but i dont give a *** to analyse it !
+      eventViewers[channels.getChannel(ch).getOnChamber()].cdNext();
 
 
 
@@ -567,7 +772,7 @@ int main(int argc, char** argv)
       fmt::print(fg(fmt::color::white) | fmt::emphasis::bold,"┌{0:─^{2}}┐\n"
       "│{1: ^{2}}│\n"
       "└{0:─^{2}}┘\n"
-      ,"", fmt::format("Channel {}",ch), width-2);
+      ,"", fmt::format("Channel {}",channels.getChannel(ch).getNumber()), width-2);
       if(evt == 0) Efficiency[ch] = 0;
       SupressBaseLine(event->Channels[ch]);
       double max=getAbsMax(event->Channels[ch]);
@@ -577,11 +782,11 @@ int main(int argc, char** argv)
 
       ///BAD PLEASE FIX THIS !!!
       std::pair<int,int> SignalWindow2;
-      if(ch<=8)
-      {
-        SignalWindow2.first=trigger_ticks[8]-SignalWindow.second-SignalWindow.first/2;
-        SignalWindow2.second=trigger_ticks[8]-SignalWindow.second+SignalWindow.first/2;
-      }
+
+
+
+      SignalWindow2.first=trigger_ticks[findWichTrigger(ch,triggers)]-SignalWindow.second-SignalWindow.first/2;
+      SignalWindow2.second=trigger_ticks[findWichTrigger(ch,triggers)]-SignalWindow.second+SignalWindow.first/2;
       std::pair<std::pair<double, double>, std::pair<double, double>> meanstd  = MeanSTD(event->Channels[ch], SignalWindow2, NoiseWindow);
       std::pair<std::pair<double, double>, std::pair<double, double>> meanstdAfter  = MeanSTD(event->Channels[ch], SignalWindow2, NoiseWindowAfter);
 
@@ -591,17 +796,11 @@ int main(int argc, char** argv)
         event_skip2=evt+1;
       }
 
-      /*
-       *
-       *
-       */
+
       std::pair<std::pair<double,int>,std::pair<double,int>> min_max=getMinMax(event->Channels[ch]);
-      mins[ch].Fill(trigger_ticks[8]-min_max.first.second);
-      total.Fill(trigger_ticks[8]-min_max.first.second);
-      /*
-       *
-       *
-       */
+      mins[ch].Fill(trigger_ticks[findWichTrigger(ch,triggers)]-min_max.first.second);
+      total.Fill(trigger_ticks[findWichTrigger(ch,triggers)]-min_max.first.second);
+
 
 
 
@@ -614,7 +813,7 @@ int main(int argc, char** argv)
       // TH1D selected = CreateSelectionPlot(waveform);
 
 
-      if((min_max.first.first-meanstd.first.first)*channels.getPolarity(ch) > NbrSigma * meanstd.first.second) hasseensomething = true;
+      if((min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity() > NbrSigma * meanstd.first.second) hasseensomething = true;
       else hasseensomething = false;
 
 
@@ -622,55 +821,57 @@ int main(int argc, char** argv)
       {
         good = true;
         //FIXME add the chamber ability;
-        Multiplicity[0]++;
+        Multiplicity[channels.getChannel(ch).getOnChamber()]++;
         //hasseensomething=true;
         Plots[ch].SetLineColor(4);
+        Plots[ch].SetLineWidth(1);
         //waveform.Scale(1.0 / 4096);
 
         // if(channels.ShouldBePositive(ch)) waveform.Fit(f1);
         // else waveform.Fit(f1);
 
         //can.SaveAs(("GOOD/GOOD" + std::to_string(evt) + "_Channel" + std::to_string(ch) + ".pdf").c_str(),"Q");
-        fmt::print(fg(fmt::color::green) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getPolarity(ch),NbrSigma * meanstd.first.second),width);
+        fmt::print(fg(fmt::color::green) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second),width);
       }
       else
       {
         Plots[ch].SetLineColor(16);
+        Plots[ch].SetLineWidth(1);
         // waveform.Scale(1.0 / 4096);
         // if(channels.ShouldBePositive(ch)) waveform.Fit(f1);
         // else waveform.Fit(f1);
         //can.SaveAs(("BAD/BAD" + std::to_string(evt) + "_Channel" + std::to_string(ch) + ".pdf").c_str(),"Q");
         //can.SaveAs(("GOOD/GOOD" + std::to_string(evt) + "_Channel" + std::to_string(ch) + ".pdf").c_str(),"Q");
-        fmt::print(fg(fmt::color::red) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getPolarity(ch),NbrSigma * meanstd.first.second),width);
+        fmt::print(fg(fmt::color::red) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second),width);
       }
-      graphPad.cd(ch+1);
+      //graphPad.cd(channels.getChannel(ch).getNumber()+1);
       gStyle->SetLineWidth(gStyle->GetLineWidth() / 4);
-      Plots[ch].GetXaxis()->SetRangeUser(0, 1024);
-      Plots[ch].GetYaxis()->SetNdivisions(10,0,0);
-      Plots[ch].GetXaxis()->SetNdivisions(10,10,0);
-      Plots[ch].GetYaxis()->SetRangeUser(-1.2,1.2);
-      Plots[ch].GetYaxis()->SetLabelSize(0.07);
-      Plots[ch].SetStats();
+      //Plots[ch].GetXaxis()->SetRangeUser(0, 1024);
+      //Plots[ch].GetYaxis()->SetNdivisions(10,0,0);
+      //Plots[ch].GetXaxis()->SetNdivisions(10,10,0);
+      //Plots[ch].GetYaxis()->SetRangeUser(-1.2,1.2);
+      //Plots[ch].GetYaxis()->SetLabelSize(0.07);
+      //Plots[ch].SetStats();
       Plots[ch].SetTitle(";");
-      if(ch==7)
+      if(ch==channels.getNumberChannels()-1)
       {
 
 
-      Plots[ch].GetXaxis()->SetLabelOffset(0.02);
-      Plots[ch].GetXaxis()->SetLabelSize(0.1);
+      //Plots[ch].GetXaxis()->SetLabelOffset(0.02);
+      //Plots[ch].GetXaxis()->SetLabelSize(0.1);
 
 
       }
       else
       {
-        Plots[ch].GetXaxis()->SetTitleOffset(0.);
-        Plots[ch].GetXaxis()->SetLabelSize(0.);
-        Plots[ch].GetXaxis()->SetTitleSize(0.);
+        //Plots[ch].GetXaxis()->SetTitleOffset(0.);
+        //Plots[ch].GetXaxis()->SetLabelSize(0.);
+        //Plots[ch].GetXaxis()->SetTitleSize(0.);
 
 
       }
       Plots[ch].Draw("HIST");
-      TLine event_min;
+     /* TLine event_min;
       event_min.SetLineColor(15);
       event_min.SetLineWidth(1);
       event_min.SetLineStyle(2);
@@ -698,23 +899,29 @@ int main(int argc, char** argv)
       event_min.SetLineColor(kBlack);
       event_min.SetLineStyle(4);
       event_min.DrawLine(0,meanstd.first.first-NbrSigma * meanstd.first.second,1024,meanstd.first.first-NbrSigma * meanstd.first.second);
-      event_min.DrawLine(0,meanstd.first.first+NbrSigma * meanstd.first.second,1024,meanstd.first.first+NbrSigma * meanstd.first.second);
+      event_min.DrawLine(0,meanstd.first.first+NbrSigma * meanstd.first.second,1024,meanstd.first.first+NbrSigma * meanstd.first.second);*/
 
-      /*
-      event_min.SetLineColor(kRed);
-      event_min.DrawLine(SignalWindow.first,(meanstd.second.first-meanstd.first.first)*channels.getPolarity(ch),SignalWindow.second,(meanstd.second.first-meanstd.first.first)*channels.getPolarity(ch));
+      //
+      //event_min.SetLineColor(kRed);
+      //event_min.DrawLine(SignalWindow.first,(meanstd.second.first-meanstd.first.first)*channels.getPolarity(ch),SignalWindow.second,(meanstd.second.first-meanstd.first.first)*channels.getPolarity(ch));
 
-      event_min.SetLineColor(kGreen);
-      event_min.DrawLine(0,meanstd.first.first+2 * meanstd.first.second,1024,meanstd.first.first+2 * meanstd.first.second);
-      event_min.DrawLine(0,meanstd.first.first-2 * meanstd.first.second,1024,meanstd.first.first-2 * meanstd.first.second);
-      event_min.Draw();*/
+      //event_min.SetLineColor(kGreen);
+      //event_min.DrawLine(0,meanstd.first.first+2 * meanstd.first.second,1024,meanstd.first.first+2 * meanstd.first.second);
+      //event_min.DrawLine(0,meanstd.first.first-2 * meanstd.first.second,1024,meanstd.first.first-2 * meanstd.first.second);
+      //event_min.Draw();
 
     }
 
 
-    can.SetTitle(("Event " + std::to_string(evt)).c_str());
-    can.SetName(("Event " + std::to_string(evt)).c_str());
-    can.SaveAs((folder+"/Events"+"/Event"+std::to_string(evt)+".pdf").c_str(),"Q");
+    //can.SetTitle(("Event " + std::to_string(evt)).c_str());
+    //can.SetName(("Event " + std::to_string(evt)).c_str());
+    //can.SaveAs((folder+"/Events"+"/Event"+std::to_string(evt)+".pdf").c_str(),"Q");
+    for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
+    {
+      std::string filename = folder+"/Events"+"/LLEvent"+std::to_string(evt)+"chamber"+std::to_string(it->first)+".root";
+      std::cout<<filename<<std::endl;
+      it->second.saveAs(filename.c_str());
+    }
 
     if(good == true)
     {
