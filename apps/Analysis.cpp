@@ -535,7 +535,6 @@ int GetTickTrigger(const Channel& channel,const double& percent,const Polarity& 
 int main(int argc, char** argv)
 {
   gStyle->SetOptStat(0);
-  //gROOT->SetStyle("ATLAS");
   gROOT->ForceStyle();
 
   gErrorIgnoreLevel={kWarning};
