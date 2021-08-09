@@ -13,6 +13,9 @@
 #include "TAxis.h"
 #include "TPaveStats.h"
 
+#include "CLI/CLI.hpp"
+#include "fmt/color.h"
+
 std::string readFileIntoString(const std::string& path)
 {
   auto ss = std::ostringstream{};
@@ -26,9 +29,25 @@ std::string readFileIntoString(const std::string& path)
   return ss.str();
 }
 
-int main()
+int main(int argc, char** argv)
 {
-  std::string filename("Results.csv");
+  CLI::App    app{"Plotter"};
+  std::string filename{"Results.csv"};
+  app.add_option("-f,--file", filename, "Name of the .csv file to process")->check(CLI::ExistingFile);
+  float min{std::numeric_limits<float>::max()};
+  app.add_option("-m,--min", min, "Minimum voltage for the fit")->check(CLI::PositiveNumber);
+  float max{std::numeric_limits<float>::min()};
+  app.add_option("-M,--max", max, "Maximun voltage for the fit")->check(CLI::PositiveNumber);
+
+  try
+  {
+    app.parse(argc, argv);
+  }
+  catch(const CLI::ParseError& e)
+  {
+    return app.exit(e);
+  }
+
   std::string file_contents;
   std::map<int, std::vector<std::string>> csv_contents;
   char delimiter = ',';
@@ -86,22 +105,27 @@ int main()
   // Set width of stat-box (fraction of pad size)
   //gStyle->SetStatH(0.2);
 
+  if (min > minVoltage) minVoltage=min;
+  if (max < maxVoltage) maxVoltage=max;
+
+  std::cout<<minVoltage<<"  "<<maxVoltage<<std::endl;
+
   TF1* sigmoid = new TF1("sigmoid","[0]/(1+ TMath::Exp([1]*([2]-x)))",minVoltage,maxVoltage);
-  sigmoid->SetParLimits(0,0,100);
+  sigmoid->SetParLimits(0,0,1.0);
   sigmoid->SetParName(0,"#varepsilon_{max}");
   sigmoid->SetParName(1,"#lambda");
-  sigmoid->SetParLimits(1,-100,100);
+  sigmoid->SetParLimits(1,0,100);
   sigmoid->SetParLimits(2,minVoltage,maxVoltage);
   sigmoid->SetParName(2,"HV_{50%}");
   gr->SetTitle("Efficiency vs Applied voltage");
   gr->GetXaxis()->SetTitle("Applied voltage (V)");
   gr->GetYaxis()->SetTitle("Efficiency (#varepsilon)");
 
-  gr->Fit("sigmoid");
+  gr->Fit("sigmoid","REM","",minVoltage,maxVoltage);
   gr->Draw("AP");
 
-
-  c1->SaveAs("toto.png","Q");
+  std::size_t found = filename.find(".csv");
+  c1->SaveAs(fmt::format("{}_Fit_{:02.0f}_{:02.0f}.png",filename.substr(0,found),minVoltage,maxVoltage).c_str(),"Q");
 
   std::exit(EXIT_SUCCESS);
 }
