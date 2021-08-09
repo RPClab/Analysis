@@ -34,9 +34,9 @@ int main(int argc, char** argv)
   CLI::App    app{"Plotter"};
   std::string filename{"Results.csv"};
   app.add_option("-f,--file", filename, "Name of the .csv file to process")->check(CLI::ExistingFile);
-  float min{std::numeric_limits<float>::max()};
+  float min{std::numeric_limits<float>::min()};
   app.add_option("-m,--min", min, "Minimum voltage for the fit")->check(CLI::PositiveNumber);
-  float max{std::numeric_limits<float>::min()};
+  float max{std::numeric_limits<float>::max()};
   app.add_option("-M,--max", max, "Maximun voltage for the fit")->check(CLI::PositiveNumber);
 
   try
