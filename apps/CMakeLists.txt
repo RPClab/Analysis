@@ -1,5 +1,6 @@
 include(CLI11)
 include(Fmt)
+include(Rapidcsv)
 
 add_executable(Analysis Analysis.cpp)
 target_link_libraries(
@@ -7,6 +8,7 @@ target_link_libraries(
   PRIVATE Event_static
   PRIVATE Channel_static
   PRIVATE CLI11::CLI11
+  PRIVATE rapidcsv
   PRIVATE fmt::fmt)
 install(TARGETS Analysis)
 
@@ -15,6 +17,7 @@ target_link_libraries(
   Plot
   PRIVATE CLI11::CLI11
   PRIVATE ${ROOT_LIBRARIES}
+  PRIVATE rapidcsv
   PRIVATE fmt::fmt)
 target_include_directories(Plot PUBLIC "${ROOT_INCLUDE_DIRS}")
 install(TARGETS Plot)

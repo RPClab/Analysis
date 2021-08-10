@@ -29,6 +29,8 @@ namespace fs = std::filesystem;
 
 #include "fmt/color.h"
 
+#include "rapidcsv.h"
+
 enum class Polarity
 {
   Positive=1,
@@ -493,6 +495,7 @@ public:
   {
     m_Canvas->SaveAs(filename.c_str());
   }
+
 private:
   TCanvas* m_Canvas{nullptr};
   TPad* m_Pad{nullptr};
@@ -534,46 +537,83 @@ int GetTickTrigger(const Channel& channel,const double& percent,const Polarity& 
 
 int main(int argc, char** argv)
 {
+
+  std::istringstream Results;
+  rapidcsv::Document documents(Results,rapidcsv::LabelParams(0,-1));
+  std::vector<std::string> line;
+  std::string arguments{"#"};
+  line.clear();
+  for(std::size_t i=0;i!=argc;++i)
+  {
+    arguments+=" ";
+    arguments+=argv[i];
+  }
+  line.push_back(arguments);
+  documents.SetRow(-1,line);
+
+  line={"HV","Efficiency","Error Efficiency","Efficiency Corrected","Error Efficiency Corrected","Multiplicity"};
+  documents.SetRow(0,line);
+
+  try
+  {
   gStyle->SetOptStat(0);
   gROOT->ForceStyle();
 
   gErrorIgnoreLevel={kWarning};
   int width=0, height=0;
   CLI::App    app{"Analysis"};
-  std::string file{""};
-  app.add_option("-f,--file", file, "Name of the file to process")->required()->check(CLI::ExistingFile);
+
+  std::string path{"./"};
+  app.add_option("--path", path, "Path where to search the files")->required()->check(CLI::ExistingPath);
+
+  std::string save{"./Results.csv"};
+  app.add_option("--saveAs", save, "File to save the results")->required();
+
+  //Add CLI::ExistingFile
+  std::vector<std::string> files;
+  app.add_option("-f,--files", files, "Name of the file(s) to process")->required();
+
   int NbrEvents{0};
   app.add_option("-e,--events", NbrEvents, "Number of event to process")->check(CLI::PositiveNumber);
+
   std::string nameTree{"Tree"};
   app.add_option("-t,--tree", nameTree, "Name of the TTree");
+
   std::pair<double, double> SignalWindow;
   app.add_option("-s,--signal", SignalWindow, "Width of the signal windows, delay between signal and trigger")->required()->type_size(2);
+
   std::pair<double, double> NoiseWindow;
   app.add_option("-n,--noise", NoiseWindow, "Noise window")->required()->type_size(2);
+
   std::pair<double, double> NoiseWindowAfter;
   app.add_option("--noiseAfter", NoiseWindowAfter, "Noise window after")->required()->type_size(2);
-  double NbrSigmaNoise=5.0;
-  app.add_option("--sigmaNoise", NbrSigmaNoise, "NbrSigmaNoise");
 
+  double NbrSigmaNoise{5.0};
+  app.add_option("--sigmaNoise", NbrSigmaNoise, "NbrSigmaNoise");
 
   int NumberChambers{0};
   app.add_option("-c,--chambers", NumberChambers, "Number of chamber(s)")->check(CLI::PositiveNumber)->required();
+
   //From MaftyNaveyuErin
   //By default we used only 8 channels so keep this behaviour
   std::vector<int> analysedchannels{0,1,2,3,4,5,6,7};
   app.add_option("--analysed", analysedchannels,"Channels want to be analysed");
+
   //By defaut all 8 channels are in one chamber
   std::vector<int> distribution{0,0,0,0,0,0,0,0};
   app.add_option("-d,--distribution", distribution, "Channel is in wich chamber start at 0 and -1 if not connected")->required();
+
   //By defaut all 8 channels have Negative polarity
   std::vector<int> polarity{-1,-1,-1,-1,-1,-1,-1,-1};
   app.add_option("-p,--polarity", polarity, "Polarity of the signal Positive,+,Negative,-")->required();
+
   std::vector<int> triggers{8,17,26,35};
   app.add_option("--triggers", triggers, "Channels used as trigger 8,17,26,35 by default");
-  bool PlotTriggers=true;
+
+  bool PlotTriggers{true};
   app.add_option("--plot_triggers", PlotTriggers, "Plot the triggers");
 
-  double NbrSigma=5.0;
+  double NbrSigma{5.0};
   app.add_option("--sigma", NbrSigma, "Number of sigma above the mean noise");
 
   try
@@ -585,9 +625,18 @@ int main(int argc, char** argv)
     return app.exit(e);
   }
 
+  std::size_t found = path.find_last_of("/\\");
+  path = path.substr(0,found);
+  std::vector<std::string> path_file;
+  for(std::size_t i=0;i!=files.size();++i)
+  {
+    path_file.push_back(path+"/"+files[i]);
+  }
+
+
   //Perform some check to avoid problem
   if(analysedchannels.size()==distribution.size() && distribution.size() == polarity.size());
-  else throw "analysed, distribution and polarity don't hve the smae number or argument !";
+  else throw std::runtime_error("analysed, distribution and polarity don't hve the smae number or argument !");
 
   Analysis::Channels channels;
   for(std::size_t ch=0; ch!=analysedchannels.size();++ch)
@@ -600,6 +649,26 @@ int main(int argc, char** argv)
   }
 
 
+
+
+
+
+  channels.print();
+
+
+
+
+  for(std::size_t file=0;file!=path_file.size();++file)
+  {
+
+  //Open The file
+    TFile fileIn(path_file[file].c_str());
+  // Create Directory
+    std::string folder{"Results/"+std::string(fs::path(path_file[file]).stem())};
+  fs::create_directories(folder+"/Events");
+  fs::create_directories(folder+"/Others");
+
+  if(PlotTriggers) fs::create_directories(folder+"/Triggers");
   //Map for TGraph
   std::map<int,EventViewer> eventViewers;
   //Create the graph for chambers
@@ -608,17 +677,6 @@ int main(int argc, char** argv)
     eventViewers[i]=EventViewer();
     eventViewers[i].divide(channels.getNumberChannelActivatedForChamber(i));
   }
-
-
-
-  channels.print();
-
-  // Create Directory
-  std::string folder{"Results/"+std::string(fs::path(file).stem())};
-  fs::create_directories(folder+"/Events");
-  fs::create_directories(folder+"/Others");
-
-  if(PlotTriggers) fs::create_directories(folder+"/Triggers");
 
   //Keep the ticks of each triggers
   std::map<int,int> trigger_ticks;
@@ -634,16 +692,23 @@ int main(int argc, char** argv)
   TH1D delta_T_not_event("delta_T_not_even","delta_T_not_even",100,0,10);
   TH1D delta_T_noisy("delta_T_noisy","delta_T_noisy",100,0,10);
 
-  //Open The file
-  TFile fileIn(file.c_str());
-  if(fileIn.IsZombie())
+  TTree* Run{nullptr};
+  try
   {
-    throw "File Not Opened";
+    if(fileIn.IsZombie())
+    {
+      throw std::runtime_error(fmt::format("File {} Not Opened",path_file[file]));
+    }
+    Run = static_cast<TTree*>(fileIn.Get(nameTree.c_str()));
+    if(Run == nullptr || Run->IsZombie())
+    {
+      throw std::runtime_error("Problem Opening TTree \"Tree\" !!!");
+    }
   }
-  TTree* Run = static_cast<TTree*>(fileIn.Get(nameTree.c_str()));
-  if(Run == nullptr || Run->IsZombie())
+  catch(const std::runtime_error& error)
   {
-    throw "Problem Opening TTree \"Tree\" !!!";
+    fmt::print(fg(fmt::color::red) | fmt::emphasis::bold,"{}\n",error.what());
+    continue;
   }
 
   double   scalefactor = 1.0;
@@ -665,7 +730,7 @@ int main(int argc, char** argv)
   bool   hasseensomething{false};
   if(Run->SetBranchAddress("Events", &event))
   {
-    throw "Error while SetBranchAddress !!!";
+    throw std::runtime_error("Error while SetBranchAddress !!!");
   }
 
 
@@ -1004,7 +1069,6 @@ int main(int argc, char** argv)
     for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
     {
       std::string filename = folder+"/Events"+"/LLEvent"+std::to_string(evt)+"chamber"+std::to_string(it->first)+".png";
-      std::cout<<filename<<std::endl;
       it->second.saveAs(filename.c_str());
      // filename = folder+"/Events"+"/LLEvent"+std::to_string(evt)+"chamber"+std::to_string(it->first)+".tex";
       //std::cout<<filename<<std::endl;
@@ -1069,6 +1133,8 @@ int main(int argc, char** argv)
   delta_T_noisy.Draw();
   can.SaveAs((folder+"/delta_T_noisy.pdf").c_str(),"Q");
 
+
+
   float efficiency=good_stack * 1.00 / (NbrEvents * scalefactor);
   float efficiency_corrected=good_stack_corrected * 1.00 / (total_event * scalefactor);
   std::cout << "Chamber efficiency " << efficiency << " +-" <<std::sqrt(efficiency*(1-efficiency)/NbrEvents)<<" with signal "<<good_stack<<" total event "<< NbrEvents<<" Multiplicity"<< Multiplicity[0]/good_stack<< std::endl;
@@ -1076,7 +1142,33 @@ int main(int argc, char** argv)
 
   std::cout<< "Number event analysed " << total_event*100.0/NbrEvents <<std::endl;
 
+  static int index{1};
+  std::vector<float> line;
+  std::string value;
+  std::size_t found = files[file].find("V.root");
+  std::string HV = files[file].substr(0,found);
+
+  line.push_back(std::stof(HV));
+  line.push_back(efficiency);
+  line.push_back(std::sqrt(efficiency*(1-efficiency)/NbrEvents));
+  line.push_back(efficiency_corrected);
+  line.push_back(std::sqrt(efficiency_corrected*(1-efficiency_corrected)/total_event));
+  line.push_back(Multiplicity[0]/good_stack);
+
+  documents.SetRow(index,line);
+  ++index;
+
+
   if(event != nullptr) delete event;
   if(Run != nullptr) delete Run;
   if(fileIn.IsOpen()) fileIn.Close();
+  }
+  documents.Save(save.c_str());
+
+  }
+  catch(const std::exception& e)
+  {
+    std::cout<<e.what()<<std::endl;
+  }
+
 }

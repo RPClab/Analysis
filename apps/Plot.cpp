@@ -12,33 +12,26 @@
 #include "TStyle.h"
 #include "TAxis.h"
 #include "TPaveStats.h"
-
+#include "TFitResult.h"
 #include "CLI/CLI.hpp"
 #include "fmt/color.h"
-
-std::string readFileIntoString(const std::string& path)
-{
-  auto ss = std::ostringstream{};
-  std::ifstream input_file(path);
-  if(!input_file.is_open())
-  {
-    std::cerr << "Could not open the file - '"<< path << "'" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  ss << input_file.rdbuf();
-  return ss.str();
-}
+#include "TLatex.h"
+#include "TLegend.h"
+#include "rapidcsv.h"
 
 int main(int argc, char** argv)
 {
   CLI::App    app{"Plotter"};
-  std::string filename{"Results.csv"};
-  app.add_option("-f,--file", filename, "Name of the .csv file to process")->check(CLI::ExistingFile);
-  float min{std::numeric_limits<float>::min()};
-  app.add_option("-m,--min", min, "Minimum voltage for the fit")->check(CLI::PositiveNumber);
-  float max{std::numeric_limits<float>::max()};
-  app.add_option("-M,--max", max, "Maximun voltage for the fit")->check(CLI::PositiveNumber);
-
+  std::vector<std::string> filenames{"Results.csv"};
+  app.add_option("-f,--files", filenames, "Name of the .csv file to process")->check(CLI::ExistingFile);
+  std::vector<float> mins;
+  app.add_option("-m,--min", mins, "Minimum voltages for the fit (-1) for default")->check(CLI::PositiveNumber);
+  std::vector<float> maxs;
+  app.add_option("-M,--max", maxs, "Maximun voltages for the fit (-1) for default")->check(CLI::PositiveNumber);
+  std::string plotName{"Results.png"};
+  app.add_option("-n,--name", plotName, "Name of the file with the plots");
+  std::vector<std::string> plotTitles;
+  app.add_option("-t,--titles", plotTitles, "Title of the plots");
   try
   {
     app.parse(argc, argv);
@@ -48,84 +41,106 @@ int main(int argc, char** argv)
     return app.exit(e);
   }
 
-  std::string file_contents;
-  std::map<int, std::vector<std::string>> csv_contents;
-  char delimiter = ',';
-
-  file_contents = readFileIntoString(filename);
-
-  std::istringstream sstream(file_contents);
-  std::vector<std::string> items;
-  std::string record;
-
-  int counter = 0;
-  while (std::getline(sstream, record)) {
-    std::istringstream line(record);
-    while (std::getline(line, record, delimiter)) {
-      items.push_back(record);
-    }
-
-    csv_contents[counter] = items;
-    items.clear();
-    counter += 1;
-  }
-
-  //TF1 func("sig", "[0]/(1+ TMath::Exp(-[1]*(x-[2])))", 0, 12);
-  TCanvas* c1 = new TCanvas("c1","A Simple Graph with error bars",200,10,700,500);
-  //c1->SetFillColor(42);
-  c1->SetGrid();
-  //c1->GetFrame()->SetFillColor(21);
-  //c1->GetFrame()->SetBorderSize(12);
-  auto gr = new TGraphErrors(csv_contents.size());
-  gr->SetTitle("TGraphErrors Example");
-  gr->SetMarkerColor(4);
-  gr->SetMarkerStyle(21);
-  gr->GetYaxis()->SetRangeUser(0,1.);
-
-
-  float minVoltage{9000};
-  float maxVoltage{-100};
-  for(std::map<int, std::vector<std::string>>::iterator it=csv_contents.begin(); it!=csv_contents.end();++it)
+  if(mins.size()==maxs.size())
   {
-    static int j{0};
-    if(minVoltage>std::stof(it->second[0])) minVoltage=std::stof(it->second[0]);
-    if(maxVoltage<std::stof(it->second[0])) maxVoltage=std::stof(it->second[0]);
-    gr->SetPoint(j,std::stof(it->second[0]),std::stof(it->second[1]));
-    gr->SetPointError(j,0.,std::stof(it->second[2]));
-    ++j;
+    if(mins.size()==0)
+    {
+      mins=std::vector<float>(filenames.size(),-1);
+      maxs=std::vector<float>(filenames.size(),-1);
+    }
+    else if (mins.size()!=filenames.size()) std::runtime_error("mins maxs and filenames must have the same size");
   }
+
+  if(plotTitles.size()!=filenames.size()) std::runtime_error("titles should have the same size than files");
+
   gStyle->SetOptFit();
-  gStyle->SetOptStat(1111111);
-  // Set stat options
-  gStyle->SetStatY(0.5);
-  // Set y-position (fraction of pad size)
-  gStyle->SetStatX(0.85);
-  // Set x-position (fraction of pad size)
-  //gStyle->SetStatW(0.4);
-  // Set width of stat-box (fraction of pad size)
-  //gStyle->SetStatH(0.2);
+ // gStyle->SetOptStat(1000000001);
+  gStyle->SetStatY(0.90);
+  //gStyle->SetPalette(kCMYK);
+  //gStyle->SetOptStat();
+  //Create the TCanvas
+  TCanvas canvas = TCanvas("Canvas","Fitted_Efficiencies",0,0,1200,800);
+  canvas.SetGrid();
 
-  if (min > minVoltage) minVoltage=min;
-  if (max < maxVoltage) maxVoltage=max;
+  auto legend = new TLegend(0.2,0.05*filenames.size());
+  for(std::size_t file=0;file!=filenames.size();++file)
+  {
+    //Read the .csv file
+    rapidcsv::Document doc(filenames[file], rapidcsv::LabelParams(0, -1));
+    std::vector<float> HVs = doc.GetColumn<float>("HV");
+    std::vector<float> efficiencies = doc.GetColumn<float>("Efficiency");
+    std::vector<float> errorEfficiencies = doc.GetColumn<float>("Error Efficiency");
+    std::vector<float> errorHVs(HVs.size(),0);
 
-  std::cout<<minVoltage<<"  "<<maxVoltage<<std::endl;
+    std::vector<float>::iterator result;
+    result = std::max_element(HVs.begin(),HVs.end());
+    if(maxs[file]==-1||maxs[file]>*result) maxs[file]=*result;
+    result = std::min_element(HVs.begin(),HVs.end());
+    if(mins[file]==-1||mins[file]<*result) mins[file]=*result;
 
-  TF1* sigmoid = new TF1("sigmoid","[0]/(1+ TMath::Exp([1]*([2]-x)))",minVoltage,maxVoltage);
-  sigmoid->SetParLimits(0,0,1.0);
-  sigmoid->SetParName(0,"#varepsilon_{max}");
-  sigmoid->SetParName(1,"#lambda");
-  sigmoid->SetParLimits(1,0,100);
-  sigmoid->SetParLimits(2,minVoltage,maxVoltage);
-  sigmoid->SetParName(2,"HV_{50%}");
-  gr->SetTitle("Efficiency vs Applied voltage");
-  gr->GetXaxis()->SetTitle("Applied voltage (V)");
-  gr->GetYaxis()->SetTitle("Efficiency (#varepsilon)");
+    TGraphErrors* gr = new TGraphErrors(HVs.size(),&HVs[0],&efficiencies[0],&errorHVs[0],&errorEfficiencies[0]);
+    gr->SetTitle(plotTitles[file].c_str());
+    gr->SetName(plotTitles[file].c_str());
+    //gr->SetMarkerColor(4);
+    //gr->SetMarkerStyle(21);
+    gr->GetYaxis()->SetRangeUser(0,1.);
 
-  gr->Fit("sigmoid","REM","",minVoltage,maxVoltage);
-  gr->Draw("AP");
+    TF1* sigmoid = new TF1("sigmoid","[0]/(1+ TMath::Exp([1]*([2]-x)))",mins[file],maxs[file]);
+    sigmoid->SetParLimits(0,0,1.0);
+    sigmoid->SetParName(0,"#varepsilon_{max}");
+    sigmoid->SetParName(1,"#lambda");
+    sigmoid->SetParLimits(1,0,100);
+    sigmoid->SetParLimits(2,mins[file]+1,maxs[file]-1);
+    sigmoid->SetParName(2,"HV_{50%}");
+    sigmoid->SetLineColor(file+1);
+    TFitResultPtr r = gr->Fit("sigmoid","REMS","",mins[file],maxs[file]);
+    gr->GetXaxis()->SetTitle("Applied voltage (V)");
+    gr->GetYaxis()->SetTitle("Efficiency (#varepsilon)");
+    gr->SetMarkerSize(1);
+    gr->SetMarkerStyle(21);
+    gr->SetLineWidth(1);
+    gr->SetLineColor(file+1);
+    gr->SetFillColor(file+1);
+    gr->SetMarkerColor(file+1);
+    sigmoid->SetLineColor(file+1);
+    sigmoid->SetFillColor(file+1);
+    sigmoid->SetMarkerColor(file+1);
+    if(file==0)gr->Draw("AP");
+    else gr->Draw("PSAMES");
+    gPad->Update(); //to force the creation of "stats"
+    TPaveStats* st = (TPaveStats*)gr->FindObject("stats");
+    // Add a new line in the stat box.
+    // Note that "=" is a control character
+    gPad->Update(); //to force the creation of "stats"
+    st->SetLineColor(file+1);
+    st->SetTextColor(file+1);
+    gPad->Modified();
+    static int line{-1};
+    if(file%2==0)
+    {
+      ++line;
+      st->SetX1NDC(0.1); //new x start position
+      st->SetX2NDC(0.3); //new x end position
+      std::cout<<line<<std::endl;
+      st->SetY1NDC(0.9-0.1*line); //new x start position
+      st->SetY2NDC(0.8-0.1*line); //new x end position
+    }
+    else
+    {
+      std::cout<<line<<std::endl;
+      st->SetX1NDC(0.3); //new x start position
+      st->SetX2NDC(0.5); //new x end position
+      st->SetY1NDC(0.9-0.1*line); //new x start position
+      st->SetY2NDC(0.8-0.1*line); //new x end position
+    }
+    gPad->Modified();
 
-  std::size_t found = filename.find(".csv");
-  c1->SaveAs(fmt::format("{}_Fit_{:02.0f}_{:02.0f}.png",filename.substr(0,found),minVoltage,maxVoltage).c_str(),"Q");
+    //legend->SetHeader("The Legend Title","C"); // option "C" allows to center the header
+    legend->AddEntry(gr);
 
+
+  }
+  legend->Draw();
+  canvas.SaveAs(plotName.c_str(),"Q");
   std::exit(EXIT_SUCCESS);
 }
