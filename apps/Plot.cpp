@@ -28,7 +28,7 @@ int main(int argc, char** argv)
   app.add_option("-m,--min", mins, "Minimum voltages for the fit (-1) for default")->check(CLI::PositiveNumber);
   std::vector<float> maxs;
   app.add_option("-M,--max", maxs, "Maximun voltages for the fit (-1) for default")->check(CLI::PositiveNumber);
-  std::string plotName{"Results.png"};
+  std::string plotName{"Results.root"};
   app.add_option("-n,--name", plotName, "Name of the file with the plots");
   std::vector<std::string> plotTitles;
   app.add_option("-t,--titles", plotTitles, "Title of the plots");
