@@ -19,8 +19,11 @@
 #include "TLegend.h"
 #include "rapidcsv.h"
 
+#include "Style.hpp"
+
 int main(int argc, char** argv)
 {
+  SetStyle();
   CLI::App    app{"Plotter"};
   std::vector<std::string> filenames{"Results.csv"};
   app.add_option("-f,--files", filenames, "Name of the .csv file to process")->check(CLI::ExistingFile);
@@ -62,14 +65,19 @@ int main(int argc, char** argv)
   TCanvas canvas = TCanvas("Canvas","Fitted_Efficiencies",0,0,1200,800);
   canvas.SetGrid();
 
+  TCanvas canvas_multi = TCanvas("Canvas","Fitted_Efficiencies",0,0,1200,800);
+  canvas_multi.SetGrid();
+
   auto legend = new TLegend(0.2,0.05*filenames.size());
   for(std::size_t file=0;file!=filenames.size();++file)
   {
+    canvas.cd();
     //Read the .csv file
     rapidcsv::Document doc(filenames[file], rapidcsv::LabelParams(0, -1));
     std::vector<float> HVs = doc.GetColumn<float>("HV");
     std::vector<float> efficiencies = doc.GetColumn<float>("Efficiency");
     std::vector<float> errorEfficiencies = doc.GetColumn<float>("Error Efficiency");
+    std::vector<float> Multiplicities = doc.GetColumn<float>("Multiplicity");
     std::vector<float> errorHVs(HVs.size(),0);
 
     std::vector<float>::iterator result;
@@ -86,25 +94,28 @@ int main(int argc, char** argv)
     gr->GetYaxis()->SetRangeUser(0,1.);
 
     TF1* sigmoid = new TF1("sigmoid","[0]/(1+ TMath::Exp([1]*([2]-x)))",mins[file],maxs[file]);
+    static int color = 0;
+    // Skip the ugly color
+    if(color==0 || color == 3 || color == 5 || color == 7 || color == 10 ) ++color;
     sigmoid->SetParLimits(0,0,1.0);
     sigmoid->SetParName(0,"#varepsilon_{max}");
     sigmoid->SetParName(1,"#lambda");
     sigmoid->SetParLimits(1,0,100);
     sigmoid->SetParLimits(2,mins[file]+1,maxs[file]-1);
     sigmoid->SetParName(2,"HV_{50%}");
-    sigmoid->SetLineColor(file+1);
+    sigmoid->SetLineColor(color);
     TFitResultPtr r = gr->Fit("sigmoid","REMS","",mins[file],maxs[file]);
     gr->GetXaxis()->SetTitle("Applied voltage (V)");
     gr->GetYaxis()->SetTitle("Efficiency (#varepsilon)");
     gr->SetMarkerSize(1);
     gr->SetMarkerStyle(21);
     gr->SetLineWidth(1);
-    gr->SetLineColor(file+1);
-    gr->SetFillColor(file+1);
-    gr->SetMarkerColor(file+1);
-    sigmoid->SetLineColor(file+1);
-    sigmoid->SetFillColor(file+1);
-    sigmoid->SetMarkerColor(file+1);
+    gr->SetLineColor(color);
+    gr->SetFillColor(color);
+    gr->SetMarkerColor(color);
+    sigmoid->SetLineColor(color);
+    sigmoid->SetFillColor(color);
+    sigmoid->SetMarkerColor(color);
     if(file==0)gr->Draw("AP");
     else gr->Draw("PSAMES");
     gPad->Update(); //to force the creation of "stats"
@@ -112,8 +123,8 @@ int main(int argc, char** argv)
     // Add a new line in the stat box.
     // Note that "=" is a control character
     gPad->Update(); //to force the creation of "stats"
-    st->SetLineColor(file+1);
-    st->SetTextColor(file+1);
+    st->SetLineColor(color);
+    st->SetTextColor(color);
     gPad->Modified();
     static int line{-1};
     if(file%2==0)
@@ -121,13 +132,11 @@ int main(int argc, char** argv)
       ++line;
       st->SetX1NDC(0.1); //new x start position
       st->SetX2NDC(0.3); //new x end position
-      std::cout<<line<<std::endl;
       st->SetY1NDC(0.9-0.1*line); //new x start position
       st->SetY2NDC(0.8-0.1*line); //new x end position
     }
     else
     {
-      std::cout<<line<<std::endl;
       st->SetX1NDC(0.3); //new x start position
       st->SetX2NDC(0.5); //new x end position
       st->SetY1NDC(0.9-0.1*line); //new x start position
@@ -139,8 +148,28 @@ int main(int argc, char** argv)
     legend->AddEntry(gr);
 
 
+    canvas_multi.cd();
+    TGraphErrors* multiplicity = new TGraphErrors(HVs.size(),&HVs[0],&Multiplicities[0],&errorHVs[0],&errorHVs[0]);
+    multiplicity->SetTitle(plotTitles[file].c_str());
+    multiplicity->SetName(plotTitles[file].c_str());
+    multiplicity->GetXaxis()->SetTitle("Applied voltage (V)");
+    multiplicity->GetYaxis()->SetTitle("Multiplicity");
+    multiplicity->SetMarkerSize(1);
+    multiplicity->SetMarkerStyle(21);
+    multiplicity->SetLineWidth(1);
+    multiplicity->SetLineColor(color);
+    multiplicity->SetFillColor(color);
+    multiplicity->SetMarkerColor(color);
+    if(file==0)multiplicity->Draw("AP");
+    else multiplicity->Draw("PSAMES");
+
+    ++color;
   }
+  canvas.cd();
   legend->Draw();
-  canvas.SaveAs(plotName.c_str(),"Q");
+  canvas_multi.cd();
+  legend->Draw();
+  canvas.SaveAs((plotName+"_Efficiency.root").c_str(),"Q");
+  canvas_multi.SaveAs((plotName+"_Multiplicity.root").c_str(),"Q");
   std::exit(EXIT_SUCCESS);
 }

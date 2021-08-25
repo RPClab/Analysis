@@ -27,9 +27,10 @@
 #include "TApplication.h"
 namespace fs = std::filesystem;
 
-#include "fmt/color.h"
-
 #include "rapidcsv.h"
+
+#include "Style.hpp"
+#include "Screen.hpp"
 
 enum class Polarity
 {
@@ -142,41 +143,6 @@ namespace Analysis
 
 }
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#define VC_EXTRALEAN
-#include <Windows.h>
-#elif defined(__linux__)
-#include <sys/ioctl.h>
-#endif // Windows/Linux
-
-
-void Clear()
-{
-  #if defined _WIN32
-  system("cls");
-  //clrscr(); // including header file : conio.h
-  #elif defined (__LINUX__) || defined(__gnu_linux__) || defined(__linux__)
-  std::cout<< u8"\033[2J\033[1;1H"; //Using ANSI Escape Sequences
-  #elif defined (__APPLE__)
-  system("clear");
-  #endif
-}
-
-void get_terminal_size(int& width, int& height) {
-  #if defined(_WIN32)
-  CONSOLE_SCREEN_BUFFER_INFO csbi;
-  GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-  width = (int)(csbi.dwSize.X);
-  height = (int)(csbi.dwSize.Y);
-  #elif defined(__linux__)
-  struct winsize w;
-  ioctl(fileno(stdout), TIOCGWINSZ, &w);
-  width = (int)(w.ws_col);
-  height = (int)(w.ws_row);
-  #endif // Windows/Linux
-}
-
 
 int NbrEventToProcess(int& nbrEvents, const Long64_t& nentries)
 {
@@ -275,7 +241,7 @@ int findWichTrigger(const int& channel,const std::vector<int>& triggers)
   return -1;
 }
 
-TH1F CreateAndFillWaveform(const int& eventNbr, const Channel& channel, const std::string& name = "", const std::string title = "Signal;ns;Normalised amplitude")
+TH1F CreateAndFillWaveform(const int& eventNbr, const Channel& channel, const std::string& name = "", const std::string title = "Signal;Time (ns);Signal (mV)")
 {
   std::string my_name  = name + " channel " + std::to_string(int(channel.Group*8+channel.Number));
   TH1F th1(my_name.c_str(), title.c_str(), channel.Data.size(), 0, channel.Data.size());
@@ -283,8 +249,20 @@ TH1F CreateAndFillWaveform(const int& eventNbr, const Channel& channel, const st
   return std::move(th1);
 }
 
+
+void ToVolt(Channel& channel)
+{
+  float VPP{560}; //1.12VPP for 0-4096
+  float DAC_TO_VOLT{VPP/2048};
+  for(std::size_t j = 0; j != channel.Data.size(); ++j)
+  {
+    channel.Data[j] = (channel.Data[j] - 2048) * DAC_TO_VOLT;
+  }
+}
+
 void SupressBaseLine(Channel& channel)
 {
+
   double min{std::numeric_limits<double>::max()};
   double max{std::numeric_limits<double>::min()};
   double meanwindows{0};
@@ -303,7 +281,6 @@ void SupressBaseLine(Channel& channel)
 
 std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& channel,const int& begin=-1,const int& end=-1)
 {
-
   int tick_max{0};
   int tick_min{0};
   double min{std::numeric_limits<double>::max()};
@@ -311,7 +288,7 @@ std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& 
   std::size_t begin_{0};
   std::size_t end_{channel.Data.size()};
   if(begin>0) begin_=begin;
-  if(end!=-1||end<=channel.Data.size()) end_= end;
+  if(end!=-1&&end<=channel.Data.size()) end_= end;
   for(std::size_t j = begin_; j != end_; ++j)
   {
     if(channel.Data[j]>max)
@@ -319,7 +296,7 @@ std::pair<std::pair<double,int>,std::pair<double,int>> getMinMax(const Channel& 
       max=channel.Data[j];
       tick_max=j;
     }
-    else if(channel.Data[j]<min)
+    if(channel.Data[j]<min)
     {
       min=channel.Data[j];
       tick_min=j;
@@ -444,6 +421,11 @@ public:
   {
     m_Canvas = new TCanvas(name.c_str(),title.c_str(),m_PositionCanvasX,m_PositionCanvasY,m_CanvasX,m_CanvasY);
     m_Canvas->cd();
+    // set margin sizes
+    m_Canvas->SetTopMargin(0.05);
+    m_Canvas->SetRightMargin(0.05);
+    m_Canvas->SetBottomMargin(0.05);
+    m_Canvas->SetLeftMargin(0.05);
     m_Pad = new TPad("","",0.01,0.01,0.99,0.95);
     m_PaveLabel = new TPaveLabel(0.01, 0.96, 0.99, 0.99,m_PaveTitle.c_str());
     m_PaveLabel->Draw();
@@ -503,7 +485,7 @@ private:
   int m_cd{0};
 };
 
-int EventViewer::m_CanvasX =1600;
+int EventViewer::m_CanvasX =3000;
 int EventViewer::m_CanvasY =1200;
 int EventViewer::m_PositionCanvasX =0;
 int EventViewer::m_PositionCanvasY =0;
@@ -530,6 +512,8 @@ int GetTickTrigger(const Channel& channel,const double& percent,const Polarity& 
 
 int main(int argc, char** argv)
 {
+  SetStyle();
+
 
   std::istringstream Results;
   rapidcsv::Document documents(Results,rapidcsv::LabelParams(0,-1));
@@ -738,11 +722,12 @@ int main(int argc, char** argv)
 
   // std::vector<TH1D> Verif;
   std::map<int, int> Efficiency;
-  TCanvas can("can","can");
+  TCanvas can("can","can",0,0,1200,800);
  // can.UseCurrentStyle();
 
   // Initialize multiplicity
   std::vector<float> Multiplicity;
+
   for(std::size_t i=0;i!=NumberChambers;++i)
   {
     Multiplicity.push_back(0.);
@@ -755,15 +740,19 @@ int main(int argc, char** argv)
   for(Long64_t evt = 0; evt < NbrEvents; ++evt)
   {
 
+
+    std::map<int,std::pair<float,float>> MinMaxChamber;
+    for(std::size_t i=0;i!=NumberChambers;++i)
+    {
+      MinMaxChamber[i]=std::pair<float,float>(std::numeric_limits<float>::max(),std::numeric_limits<float>::min());
+    }
+
     for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
     {
       it->second.reset();
     }
-    get_terminal_size(width, height);
-    fmt::print(fg(fmt::color::orange) | fmt::emphasis::bold,"┌{0:─^{2}}┐\n"
-                                                            "│{1: ^{2}}│\n"
-                                                            "└{0:─^{2}}┘\n"
-                                                           ,"", fmt::format("Event {}",evt), width-2);
+
+    BoxedText(fg(fmt::color::orange) | fmt::emphasis::bold,fmt::format("Event {}",evt));
 
     // Title
     for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
@@ -781,11 +770,13 @@ int main(int argc, char** argv)
     // First loop on triggers
     for(unsigned int ch = 0; ch != event->Channels.size(); ++ch)
     {
+
       if(std::find(triggers.begin(),triggers.end(),ch)!=triggers.end())
       {
+        //ToVolt(event->Channels[ch]); //CHANGE THIS
         SupressBaseLine(event->Channels[ch]);
         double max=getAbsMax(event->Channels[ch]);
-        Normalise(event->Channels[ch],max);
+        //Normalise(event->Channels[ch],max);
         int tick=GetTickTrigger(event->Channels[ch],0.20,Polarity::Negative);
         trigger_ticks[ch]=tick;
         if(PlotTriggers)
@@ -802,6 +793,16 @@ int main(int argc, char** argv)
           ticks_distribution[ch].Fill(tick);
           can.SaveAs((folder+"/Triggers"+"/Event"+std::to_string(evt)+"_Trigger"+std::to_string(ch)+".pdf").c_str(),"Q");
         }
+      }
+      else
+      {
+        if(!channels.hasToBeAnalysed(ch)) continue;  // Data for channel X is in file but i dont give a *** to analyse it !
+        ToVolt(event->Channels[ch]);
+        SupressBaseLine(event->Channels[ch]);
+        std::pair<std::pair<double,int>,std::pair<double,int>> min_max_all=getMinMax(event->Channels[ch]);
+
+        if(MinMaxChamber[channels.getChannel(ch).getOnChamber()].first>min_max_all.first.first) MinMaxChamber[channels.getChannel(ch).getOnChamber()].first = min_max_all.first.first;
+        if(MinMaxChamber[channels.getChannel(ch).getOnChamber()].second<min_max_all.second.first) MinMaxChamber[channels.getChannel(ch).getOnChamber()].second=min_max_all.second.first;
       }
     }
 
@@ -820,8 +821,8 @@ int main(int argc, char** argv)
     for(unsigned int ch = 0; ch != event->Channels.size(); ++ch)
     {
       if(!channels.hasToBeAnalysed(ch)) continue;  // Data for channel X is in file but i dont give a *** to analyse it !
+      //ToVolt(event->Channels[ch]);
       eventViewers[channels.getChannel(ch).getOnChamber()].cdNext();
-
 
 
       if(ch==0)
@@ -833,20 +834,19 @@ int main(int argc, char** argv)
         }
       }
 
+      BoxedText(fg(fmt::color::white) | fmt::emphasis::bold,fmt::format("Channel {}",channels.getChannel(ch).getNumber()));
 
-
-
-
-      get_terminal_size(width, height);
-      fmt::print(fg(fmt::color::white) | fmt::emphasis::bold,"┌{0:─^{2}}┐\n"
-      "│{1: ^{2}}│\n"
-      "└{0:─^{2}}┘\n"
-      ,"", fmt::format("Channel {}",channels.getChannel(ch).getNumber()), width-2);
       if(evt == 0) Efficiency[ch] = 0;
-      SupressBaseLine(event->Channels[ch]);
+      //SupressBaseLine(event->Channels[ch]);
       double max=getAbsMax(event->Channels[ch]);
-      Normalise(event->Channels[ch],max);
+
+
+
+      //Normalise(event->Channels[ch],max);
       Plots[ch]=CreateAndFillWaveform(evt, event->Channels[ch], "Waveform");
+      Plots[ch].GetXaxis()->SetTitle("Time (ns)");
+      Plots[ch].GetYaxis()->SetTitle("Amplitude (mV)");
+      //Plots[ch].Scale(DAC_TO_VOLT);
 
 
       ///BAD PLEASE FIX THIS !!!
@@ -869,6 +869,7 @@ int main(int argc, char** argv)
       std::pair<std::pair<double,int>,std::pair<double,int>> min_max_all=getMinMax(event->Channels[ch]);
       mins[ch].Fill(trigger_ticks[findWichTrigger(ch,triggers)]-min_max_all.first.second);
       total.Fill(trigger_ticks[findWichTrigger(ch,triggers)]-min_max_all.first.second);
+
 
 
 
@@ -895,7 +896,7 @@ int main(int argc, char** argv)
 
         //hasseensomething=true;
         Plots[ch].SetLineColor(16);
-        Plots[ch].SetLineWidth(1);
+        //Plots[ch].SetLineWidth(1);
 
         //Signal region
         Plots[ch].Draw("HIST");
@@ -904,49 +905,39 @@ int main(int argc, char** argv)
         h1c->SetLineColor(8);
         h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
         h1c->Draw("HISTsame");
-        h1c->GetYaxis()->SetLabelSize(0.02);
-        h1c->GetXaxis()->SetLabelSize(0.02);
+        //h1c->GetYaxis()->SetLabelSize(0.02);
+        //h1c->GetXaxis()->SetLabelSize(0.02);
 
         fmt::print(fg(fmt::color::green) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second),width);
       }
       else
       {
         Plots[ch].SetLineColor(16);
-        Plots[ch].SetLineWidth(1);
+        //Plots[ch].SetLineWidth(1);
         Plots[ch].Draw("HIST");
         TH1F* h1c = static_cast<TH1F*>(Plots[ch].Clone());
         h1c->SetLineColor(46);
         h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
         h1c->Draw("HISTsame");
-        h1c->GetYaxis()->SetLabelSize(0.02);
-        h1c->GetXaxis()->SetLabelSize(0.02);
         fmt::print(fg(fmt::color::red) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second),width);
       }
       //graphPad.cd(channels.getChannel(ch).getNumber()+1);
       //gStyle->SetLineWidth(gStyle->GetLineWidth() / 4);
       Plots[ch].GetXaxis()->SetRangeUser(0, 1024);
-      Plots[ch].GetYaxis()->SetNdivisions(12,2,0);
-      double RangeUsermin{min_max_all.first.first*1.1};
-      double RangeUsermax{min_max_all.second.first*1.1};
+      double RangeUsermin{MinMaxChamber[channels.getChannel(ch).getOnChamber()].first*1.05};
+      double RangeUsermax{MinMaxChamber[channels.getChannel(ch).getOnChamber()].second*1.05};
       Plots[ch].GetYaxis()->SetRangeUser(RangeUsermin,RangeUsermax);
-      Plots[ch].GetYaxis()->SetLabelSize(0.02);
-      Plots[ch].GetXaxis()->SetLabelSize(0.02);
-      Plots[ch].SetStats();
-      Plots[ch].SetTitle(";");
       if(ch==channels.getNumberChannels()-1)
       {
-
-
-        Plots[ch].GetXaxis()->SetLabelOffset(0.02);
-        Plots[ch].GetXaxis()->SetLabelSize(0.02);
-
-
+       // Plots[ch].GetXaxis()->SetLabelOffset(0.02);
+       // Plots[ch].GetYaxis()->SetLabelSize(0.02);
       }
       else
       {
-          Plots[ch].GetXaxis()->SetTitleOffset(0.);
-          Plots[ch].GetXaxis()->SetLabelSize(0.);
-          Plots[ch].GetXaxis()->SetTitleSize(0.);
+          //Plots[ch].GetXaxis()->SetTitleOffset(0.);
+          //Plots[ch].GetXaxis()->SetLabelSize(0.);
+      //  Plots[ch].GetXaxis()->SetTitleSize(0.);
+        //Plots[ch].GetXaxis()->SetTitleSize(0.);
       }
 
       TLine event_min;
@@ -1046,21 +1037,16 @@ int main(int argc, char** argv)
 
       if(plotIndividualChannels)
       {
-        TCanvas can2("can","can",0,0,1800,600);
+        TCanvas can2("can","can",0,0,1200,800);
         can2.cd();
         Plots[ch].GetXaxis()->SetLimits(0.,1024*1.0/5);
         Plots[ch].GetXaxis()->SetRangeUser(0, 1024);
-        Plots[ch].GetXaxis()->SetNdivisions(21,10,0);
-        double RangeUsermin{min_max_all.first.first*1.1};
-        double RangeUsermax{min_max_all.second.first*1.1};
+        double RangeUsermin{min_max_all.first.first*1.05};
+        double RangeUsermax{min_max_all.second.first*1.05};
         Plots[ch].GetYaxis()->SetRangeUser(RangeUsermin,RangeUsermax);
-        Plots[ch].GetYaxis()->SetLabelSize(0.02);
-        Plots[ch].GetXaxis()->SetLabelSize(0.02);
         Plots[ch].SetStats();
-        Plots[ch].GetXaxis()->SetTitle("ns");
-        Plots[ch].GetXaxis()->SetTitleSize(0.04);
-        //Plots[ch].GetYaxis()->SetTitle("Y axis title");
-        //Plots[ch].GetXaxis()->SetTitleOffset (0);
+        Plots[ch].GetXaxis()->SetTitle("Time (ns)");
+        Plots[ch].GetYaxis()->SetTitle("Amplitude (mV)");
         //hasseensomething=true;
         Plots[ch].SetLineColor(16);
         Plots[ch].SetLineWidth(1);
@@ -1073,8 +1059,6 @@ int main(int argc, char** argv)
           h1c->SetLineColor(46);//8
           h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
           h1c->Draw("HISTsame");
-          h1c->GetYaxis()->SetLabelSize(0.02);
-          h1c->GetXaxis()->SetLabelSize(0.02);
         }
         else
         {
@@ -1082,9 +1066,6 @@ int main(int argc, char** argv)
           h1c->SetLineColor(46);//46
           h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
           h1c->Draw("HISTsame");
-          h1c->GetYaxis()->SetLabelSize(0.02);
-          h1c->GetXaxis()->SetTitle("ns");
-          h1c->GetXaxis()->SetLabelSize(0.02);
         }
 
         TLine event_min;
@@ -1128,17 +1109,10 @@ int main(int argc, char** argv)
 
     }
 
-
-    //can.SetTitle(("Event " + std::to_string(evt)).c_str());
-    //can.SetName(("Event " + std::to_string(evt)).c_str());
-    //can.SaveAs((folder+"/Events"+"/Event"+std::to_string(evt)+".pdf").c_str(),"Q");
     for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
     {
       std::string filename = folder+"/Events"+"/Event"+std::to_string(evt)+"chamber"+std::to_string(it->first)+".png";
       it->second.saveAs(filename.c_str());
-     // filename = folder+"/Events"+"/LLEvent"+std::to_string(evt)+"chamber"+std::to_string(it->first)+".tex";
-      //std::cout<<filename<<std::endl;
-      //it->second.saveAs(filename.c_str());
     }
 
     if(good == true)

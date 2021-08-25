@@ -48,3 +48,20 @@ install(TARGETS Event_static)
 add_library(Event_shared SHARED $<TARGET_OBJECTS:Event>)
 target_link_libraries(Event_shared PUBLIC Channel_shared)
 install(TARGETS Event_shared)
+
+add_library(Style STATIC "Style.cpp")
+target_link_libraries(Style PUBLIC ${ROOT_LIBRARIES})
+target_include_directories(
+  Style
+  PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+  PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  PUBLIC "${ROOT_INCLUDE_DIRS}")
+install(TARGETS Style)
+
+add_library(Screen STATIC "Screen.cpp")
+target_link_libraries(Screen PUBLIC fmt::fmt)
+target_include_directories(
+  Screen
+  PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+  PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+install(TARGETS Screen)
