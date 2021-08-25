@@ -628,7 +628,7 @@ int main(int argc, char** argv)
   for(std::size_t ch=0; ch!=analysedchannels.size();++ch)
   {
     static int ID{0};
-    //If channel is a trigger thn add 1 (the user want the next channel not the trigger)
+    //If channel is a trigger then add 1 (the user want the next channel not the trigger)
     if(std::find(triggers.begin(), triggers.end(), ch)!=triggers.end()) ID++;
     channels.insert(ID,ch,distribution[ch],static_cast<Polarity>(polarity[ch]));
     ID++;
