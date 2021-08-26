@@ -152,84 +152,9 @@ int NbrEventToProcess(int& nbrEvents, const Long64_t& nentries)
     std::cout << "WARNING : You ask to process " << nbrEvents << " but this run only have " << nentries << " !!!";
     return nbrEvents = nentries;
   }
-  else
-    return nbrEvents;
+  else return nbrEvents;
 }
 
-class PositiveNegative
-{
-public:
-  PositiveNegative() {}
-  PositiveNegative(const std::string& PN) { Parse(PN); }
-  bool        IsPositiveSignal() { return m_positive; }
-  std::string asString()
-  {
-    if(m_positive) return "POSITIVE";
-    else
-      return "NEGATIVE";
-  }
-
-private:
-  void Parse(const std::string& PN)
-  {
-    if(PN == "Positive" || PN == "POSITIVE" || PN == "P" || PN == "+") m_positive = true;
-    else if(PN == "Negative" || PN == "NEGATIVE" || PN == "N" || PN == "-")
-      m_positive = false;
-    else
-    {
-      std::cout << "BAD argument !!!" << std::endl;
-      std::exit(-5);
-    }
-  }
-  bool m_positive{false};
-};
-
-class channel
-{
-public:
-  channel(const int& chn, const std::string& PN): m_channelNumber(chn), m_PN(PN) {}
-  channel(){};
-  int         getChannelNumber() { return m_channelNumber; }
-  bool        isPositive() { return m_PN.IsPositiveSignal(); }
-  bool        isNegative() { return !m_PN.IsPositiveSignal(); }
-  std::string PNasString() { return m_PN.asString(); }
-  int getPolarity()
-  {
-    if(isPositive()) return 1;
-    else return -1;
-  }
-private:
-  int              m_channelNumber{-1};
-  PositiveNegative m_PN;
-};
-
-/*class Channels
-{
-public:
-  std::size_t getNumberOfChannelActivated() { return m_Channel.size(); }
-  void        activateChannel(const int& chn, const std::string& PN) { m_Channel.emplace(chn, channel(chn, PN)); }
-  void        print()
-  {
-    std::cout << "Channels ENABLED for the analysis : \n";
-    for(std::map<int, channel>::iterator it = m_Channel.begin(); it != m_Channel.end(); ++it)
-    { std::cout << "\t--> Channel " << it->first << " is declared to have " << it->second.PNasString() << " signal" << std::endl; }
-  }
-  bool DontAnalyseIt(const int& channel)
-  {
-    if(m_Channel.find(channel) == m_Channel.end()) return true;
-    else
-      return false;
-  }
-  bool ShouldBePositive(const int& ch) { return m_Channel[ch].isPositive(); }
-  int getPolarity(const int& ch) { return m_Channel[ch].getPolarity(); }
-
-  std::map<int, channel> getChannels()
-  {
-    return m_Channel;
-  }
-private:
-  std::map<int, channel> m_Channel;
-};*/
 
 int findWichTrigger(const int& channel,const std::vector<int>& triggers)
 {
@@ -369,63 +294,17 @@ std::pair<std::pair<double, double>, std::pair<double, double>> MeanSTD(const Ch
   return std::pair<std::pair<double, double>, std::pair<double, double>>(noise, signal);
 }
 
-/*class Chamber
-{
-public:
-  void   activateChannel(const int& chn, const std::string& PN) { m_Channels.activateChannel(chn, PN); }
-  double getEfficiency() { return m_NumberFired * 1.0 / m_Total; }
-  double getMultiplicity() { return m_TotalHit * 1.0 / m_NumberFired; }
-
-private:
-  int      m_TotalHit{0};
-  int      m_NumberFired{0};
-  int      m_Total{0};
-  Channels m_Channels;
-};*/
-
-/*class Plotter
-{
-public:
-  void addType(const std::string& type)
-  {
-    m_Plots.emplace(type,std::vector<std::vector<TH1F>>());
-  }
-  void setGroupNumber(const std::string& type,const int& nbr)
-  {
-    m_Plots[type].resize(nbr);
-  }
-  TH1F& getPlot(const std::string& type,const int& group,const int& channel)
-  {
-    return m_Plots[type][group][channel];
-  }
-private:
-  std::map<std::string,std::vector<std::vector<TH1F>>> m_Plots;
-};*/
-
-/*
- * TH1D CreateSelectionPlot(const TH1D& th)
- * {
- *    TH1D selected=th;
- *    selected.SetLineColor(kRed);
- *    std::string name="Selected_"+std::string(th.GetName());
- *    std::string title="Selected "+std::string(th.GetTitle());
- *    selected.SetTitle(title.c_str());
- *    selected.SetName(name.c_str());
- *    return std::move(selected);
- * }*/
-
 class EventViewer
 {
 public:
-  EventViewer(const std::string& name="",const std::string& title="")
+  EventViewer(const std::string& name="",const std::string& title="",const bool& create=true) : m_Canvas(new TCanvas(create))
   {
-    m_Canvas = new TCanvas(name.c_str(),title.c_str(),m_PositionCanvasX,m_PositionCanvasY,m_CanvasX,m_CanvasY);
+    m_Canvas->SetName(name.c_str());
+    m_Canvas->SetTitle(title.c_str());
+    m_Canvas->SetFillStyle(4000);
+    m_Canvas->SetCanvasSize(m_CanvasX,m_CanvasY);
+    m_Canvas->SetWindowPosition(m_PositionCanvasX,m_PositionCanvasY);
     m_Canvas->cd();
-    // set margin sizes
-    m_Canvas->SetTopMargin(0.05);
-    m_Canvas->SetRightMargin(0.05);
-    m_Canvas->SetBottomMargin(0.05);
-    m_Canvas->SetLeftMargin(0.05);
     m_Pad = new TPad("","",0.01,0.01,0.99,0.95);
     m_PaveLabel = new TPaveLabel(0.01, 0.96, 0.99, 0.99,m_PaveTitle.c_str());
     m_PaveLabel->Draw();
@@ -433,9 +312,9 @@ public:
   }
   ~EventViewer()
   {
-    /*if(m_PaveLabel!=nullptr) delete m_PaveLabel;
-    if(m_Pad!=nullptr) delete m_Pad;
-    if(m_Canvas!=nullptr) delete m_Canvas;*/
+    if(m_PaveLabel==nullptr) delete m_PaveLabel;
+    if(m_Pad==nullptr) delete m_Pad;
+    if(m_Canvas==nullptr) delete m_Canvas;
   }
   void setPaveLabel(const std::string& title)
   {
@@ -467,26 +346,53 @@ public:
   {
     m_cd=0;
   }
-
   void saveAs(const std::string& filename)
   {
     m_Canvas->SaveAs(filename.c_str());
   }
-
+  static void setPeriod(const double& period)
+  {
+    m_Period=period;
+  }
+  void createWaveForm(const Analysis::Channels& channels,const Channel& channel)
+  {
+    int number{channels.getChannel(channel.Group*8+channel.Number).getNumber()};
+    m_ChannelPlot[number] = TH1F(("Waveform_"+std::to_string(number)).c_str(),";Time (ns);Signal (mV)", channel.Data.size(), 0, channel.Data.size());
+    m_ChannelPlot[number].Clear();
+    for(std::size_t i = 0; i != channel.Data.size(); ++i) m_ChannelPlot[number].Fill(i, channel.Data[i]);
+    m_ChannelPlot[number].SetLineColor(16);
+    m_ChannelPlot[number].GetXaxis()->SetRangeUser(0, channel.Data.size());
+    m_ChannelPlot[number].GetXaxis()->SetLimits(0.,channel.Data.size()*m_Period);
+  }
+  void UnderlineSignalRegion(const int& channel, const Color_t& color,const double& min,const double& max)
+  {
+    TH1F* h1c = static_cast<TH1F*>(m_ChannelPlot[channel].Clone());
+    h1c->SetLineColor(color);
+    h1c->GetXaxis()->SetRange(min,max);
+    h1c->Draw("HISTsame");
+    //delete h1c;
+  }
+  TH1F& getPlot(const int& channel)
+  {
+    return m_ChannelPlot[channel];
+  }
 private:
   TCanvas* m_Canvas{nullptr};
   TPad* m_Pad{nullptr};
   TPaveLabel* m_PaveLabel{nullptr};
+  std::map<int,TH1F> m_ChannelPlot;
   std::string m_PaveTitle;
   static int m_CanvasX;
   static int m_CanvasY;
   static int m_PositionCanvasX;
   static int m_PositionCanvasY;
+  static double m_Period;
   int m_cd{0};
 };
 
-int EventViewer::m_CanvasX =3000;
-int EventViewer::m_CanvasY =1200;
+double EventViewer::m_Period =1.0;
+int EventViewer::m_CanvasX =1200;
+int EventViewer::m_CanvasY =1500;
 int EventViewer::m_PositionCanvasX =0;
 int EventViewer::m_PositionCanvasY =0;
 
@@ -513,8 +419,9 @@ int GetTickTrigger(const Channel& channel,const double& percent,const Polarity& 
 int main(int argc, char** argv)
 {
   SetStyle();
-
-
+  gROOT->ForceStyle();
+  ROOT::EnableThreadSafety();
+  ROOT::EnableImplicitMT(5);
   std::istringstream Results;
   rapidcsv::Document documents(Results,rapidcsv::LabelParams(0,-1));
   std::vector<std::string> line;
@@ -533,11 +440,9 @@ int main(int argc, char** argv)
 
   try
   {
-  gStyle->SetOptStat(0);
-  gROOT->ForceStyle();
+
 
   gErrorIgnoreLevel={kWarning};
-  int width=0, height=0;
   CLI::App    app{"Analysis"};
 
   std::string path{"./"};
@@ -634,18 +539,20 @@ int main(int argc, char** argv)
     ID++;
   }
 
-
-
-
-
-
   channels.print();
 
 
-
-
+  TCanvas can2("","",0,0,800,600);
   for(std::size_t file=0;file!=path_file.size();++file)
   {
+    TH1D total("Tick Distribution","Tick Distribution",1024,0,1024);
+    TH1D delta_t("delta_T","delta_T",100,0,10);
+    TH1D delta_T_not_event("delta_T_not_even","delta_T_not_even",100,0,10);
+    TH1D delta_T_noisy("delta_T_noisy","delta_T_noisy",100,0,10);
+    total.Clear();
+    delta_t.Clear();
+    delta_T_not_event.Clear();
+    delta_T_noisy.Clear();
 
   //Open The file
     TFile fileIn(path_file[file].c_str());
@@ -673,10 +580,7 @@ int main(int argc, char** argv)
     ticks_distribution[triggers[i]]=TH1D("Tick Distribution","Tick Distribution",1024,0,1024);
   }
 
-  TH1D total("Tick Distribution","Tick Distribution",1024,0,1024);
-  TH1D delta_t("delta_T","delta_T",100,0,10);
-  TH1D delta_T_not_event("delta_T_not_even","delta_T_not_even",100,0,10);
-  TH1D delta_T_noisy("delta_T_noisy","delta_T_noisy",100,0,10);
+
 
   TTree* Run{nullptr};
   try
@@ -722,8 +626,7 @@ int main(int argc, char** argv)
 
   // std::vector<TH1D> Verif;
   std::map<int, int> Efficiency;
-  TCanvas can("can","can",0,0,1200,800);
- // can.UseCurrentStyle();
+
 
   // Initialize multiplicity
   std::vector<float> Multiplicity;
@@ -750,27 +653,21 @@ int main(int argc, char** argv)
     for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
     {
       it->second.reset();
+      it->second.setPaveLabel(fmt::format("Event {}",evt));
     }
 
     BoxedText(fg(fmt::color::orange) | fmt::emphasis::bold,fmt::format("Event {}",evt));
 
-    // Title
-    for(std::map<int,EventViewer>::iterator it= eventViewers.begin(); it!=eventViewers.end();++it)
-    {
-      it->second.setPaveLabel(fmt::format("Event {}",evt));
-    }
-
-
     event->clear();
     Run->GetEntry(evt);
 
-    std::vector<TH1F> Plots(event->Channels.size());
+    //std::vector<TH1F> Plots(event->Channels.size());
     float min{std::numeric_limits<float>::max()};
     float max{std::numeric_limits<float>::min()};
     // First loop on triggers
     for(unsigned int ch = 0; ch != event->Channels.size(); ++ch)
     {
-
+      EventViewer::setPeriod(event->Period_ns);
       if(std::find(triggers.begin(),triggers.end(),ch)!=triggers.end())
       {
         //ToVolt(event->Channels[ch]); //CHANGE THIS
@@ -779,7 +676,7 @@ int main(int argc, char** argv)
         //Normalise(event->Channels[ch],max);
         int tick=GetTickTrigger(event->Channels[ch],0.20,Polarity::Negative);
         trigger_ticks[ch]=tick;
-        if(PlotTriggers)
+        /*if(PlotTriggers)
         {
           can.Clear();
           TH1F toto=CreateAndFillWaveform(evt, event->Channels[ch], "Waveform");
@@ -792,7 +689,7 @@ int main(int argc, char** argv)
           event_min.DrawLine(0,-0.2,1024,-0.2);
           ticks_distribution[ch].Fill(tick);
           can.SaveAs((folder+"/Triggers"+"/Event"+std::to_string(evt)+"_Trigger"+std::to_string(ch)+".pdf").c_str(),"Q");
-        }
+        }*/
       }
       else
       {
@@ -805,16 +702,6 @@ int main(int argc, char** argv)
         if(MinMaxChamber[channels.getChannel(ch).getOnChamber()].second<min_max_all.second.first) MinMaxChamber[channels.getChannel(ch).getOnChamber()].second=min_max_all.second.first;
       }
     }
-
-    can.Clear();
-    TPaveLabel title(0.01, 0.965, 0.95, 0.99, ("Event "+std::to_string(evt)).c_str());
-    title.Draw();
-    TPad graphPad("Graphs","Graphs",0.005,0.01,0.995,0.96);
-    graphPad.Draw();
-    graphPad.cd();
-
-
-    graphPad.Divide(1,channels.getNumberChannels(),0.,0.);
 
     double delta_t_last{0};
     double delta_t_new{0};
@@ -837,16 +724,14 @@ int main(int argc, char** argv)
       BoxedText(fg(fmt::color::white) | fmt::emphasis::bold,fmt::format("Channel {}",channels.getChannel(ch).getNumber()));
 
       if(evt == 0) Efficiency[ch] = 0;
-      //SupressBaseLine(event->Channels[ch]);
       double max=getAbsMax(event->Channels[ch]);
+      int realChannel=channels.getChannel(ch).getNumber();
+      eventViewers[channels.getChannel(ch).getOnChamber()].createWaveForm(channels,event->Channels[ch]);
+      double RangeUsermin{MinMaxChamber[channels.getChannel(ch).getOnChamber()].first*1.05};
+      double RangeUsermax{MinMaxChamber[channels.getChannel(ch).getOnChamber()].second*1.05};
+      eventViewers[channels.getChannel(ch).getOnChamber()].getPlot(realChannel).GetYaxis()->SetRangeUser(RangeUsermin,RangeUsermax);
+      eventViewers[channels.getChannel(ch).getOnChamber()].getPlot(realChannel).Draw("HIST");
 
-
-
-      //Normalise(event->Channels[ch],max);
-      Plots[ch]=CreateAndFillWaveform(evt, event->Channels[ch], "Waveform");
-      Plots[ch].GetXaxis()->SetTitle("Time (ns)");
-      Plots[ch].GetYaxis()->SetTitle("Amplitude (mV)");
-      //Plots[ch].Scale(DAC_TO_VOLT);
 
 
       ///BAD PLEASE FIX THIS !!!
@@ -865,13 +750,9 @@ int main(int argc, char** argv)
         event_skip2=evt+1;
       }
 
-
       std::pair<std::pair<double,int>,std::pair<double,int>> min_max_all=getMinMax(event->Channels[ch]);
       mins[ch].Fill(trigger_ticks[findWichTrigger(ch,triggers)]-min_max_all.first.second);
       total.Fill(trigger_ticks[findWichTrigger(ch,triggers)]-min_max_all.first.second);
-
-
-
 
       std::pair<std::pair<double,int>,std::pair<double,int>> min_max=getMinMax(event->Channels[ch],SignalWindow2.first,SignalWindow2.second);
       // std::cout<<"Event "<<evt<<" Channel "<<ch<<"/n";
@@ -888,45 +769,13 @@ int main(int argc, char** argv)
       else hasseensomething = false;
 
 
+      eventViewers[channels.getChannel(ch).getOnChamber()].UnderlineSignalRegion(realChannel,hasseensomething ? 8 : 46,SignalWindow2.first,SignalWindow2.second);
+      CenterXText(hasseensomething ? fg(fmt::color::green) : fg(fmt::color::red) | fmt::emphasis::bold,fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second));
       if(hasseensomething == true)
       {
         good = true;
-
         Multiplicity[channels.getChannel(ch).getOnChamber()]++;
-
-        //hasseensomething=true;
-        Plots[ch].SetLineColor(16);
-        //Plots[ch].SetLineWidth(1);
-
-        //Signal region
-        Plots[ch].Draw("HIST");
-        //Copy h1 in a clone h1c. Set range and color for h1c
-        TH1F* h1c = static_cast<TH1F*>(Plots[ch].Clone());
-        h1c->SetLineColor(8);
-        h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
-        h1c->Draw("HISTsame");
-        //h1c->GetYaxis()->SetLabelSize(0.02);
-        //h1c->GetXaxis()->SetLabelSize(0.02);
-
-        fmt::print(fg(fmt::color::green) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second),width);
       }
-      else
-      {
-        Plots[ch].SetLineColor(16);
-        //Plots[ch].SetLineWidth(1);
-        Plots[ch].Draw("HIST");
-        TH1F* h1c = static_cast<TH1F*>(Plots[ch].Clone());
-        h1c->SetLineColor(46);
-        h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
-        h1c->Draw("HISTsame");
-        fmt::print(fg(fmt::color::red) | fmt::emphasis::bold,"{:^{}}\n",fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second),width);
-      }
-      //graphPad.cd(channels.getChannel(ch).getNumber()+1);
-      //gStyle->SetLineWidth(gStyle->GetLineWidth() / 4);
-      Plots[ch].GetXaxis()->SetRangeUser(0, 1024);
-      double RangeUsermin{MinMaxChamber[channels.getChannel(ch).getOnChamber()].first*1.05};
-      double RangeUsermax{MinMaxChamber[channels.getChannel(ch).getOnChamber()].second*1.05};
-      Plots[ch].GetYaxis()->SetRangeUser(RangeUsermin,RangeUsermax);
       if(ch==channels.getNumberChannels()-1)
       {
        // Plots[ch].GetXaxis()->SetLabelOffset(0.02);
@@ -945,8 +794,8 @@ int main(int argc, char** argv)
       event_min.SetLineColor(30);
       event_min.SetLineWidth(2);
       event_min.SetLineStyle(10);
-      event_min.DrawLine(SignalWindow2.first,RangeUsermin,SignalWindow2.first,RangeUsermax);
-      event_min.DrawLine(SignalWindow2.second,RangeUsermin,SignalWindow2.second,RangeUsermax);
+      event_min.DrawLine(SignalWindow2.first*event->Period_ns,RangeUsermin,SignalWindow2.first*event->Period_ns,RangeUsermax);
+      event_min.DrawLine(SignalWindow2.second*event->Period_ns,RangeUsermin,SignalWindow2.second*event->Period_ns,RangeUsermax);
 
       if(!dontPlotNoiseLines)
       {
@@ -954,55 +803,55 @@ int main(int argc, char** argv)
         event_min.SetLineColor(42);
         event_min.SetLineWidth(2);
         event_min.SetLineStyle(10);
-        event_min.DrawLine(NoiseWindow.first,RangeUsermin,NoiseWindow.first,RangeUsermax);
-        event_min.DrawLine(NoiseWindow.second,RangeUsermin,NoiseWindow.second,RangeUsermax);
+        event_min.DrawLine(NoiseWindow.first*event->Period_ns,RangeUsermin,NoiseWindow.first*event->Period_ns,RangeUsermax);
+        event_min.DrawLine(NoiseWindow.second*event->Period_ns,RangeUsermin,NoiseWindow.second*event->Period_ns,RangeUsermax);
 
         // Noise After
         event_min.SetLineColor(42);
         event_min.SetLineWidth(2);
         event_min.SetLineStyle(10);
-        event_min.DrawLine(NoiseWindowAfter.first,RangeUsermin,NoiseWindowAfter.first,RangeUsermax);
-        event_min.DrawLine(NoiseWindowAfter.second,RangeUsermin,NoiseWindowAfter.second,RangeUsermax);
+        event_min.DrawLine(NoiseWindowAfter.first*event->Period_ns,RangeUsermin,NoiseWindowAfter.first*event->Period_ns,RangeUsermax);
+        event_min.DrawLine(NoiseWindowAfter.second*event->Period_ns,RangeUsermin,NoiseWindowAfter.second*event->Period_ns,RangeUsermax);
 
         //Mean noise before
         event_min.SetLineColor(45);
         event_min.SetLineWidth(2);
         event_min.SetLineStyle(9);
-        event_min.DrawLine(NoiseWindow.first,meanstd.first.first,NoiseWindow.second,meanstd.first.first);
+        event_min.DrawLine(NoiseWindow.first*event->Period_ns,meanstd.first.first,NoiseWindow.second*event->Period_ns,meanstd.first.first);
 
         // N*Sigma noise before
         event_min.SetLineColor(45);
         event_min.SetLineWidth(2);
         event_min.SetLineStyle(8);
-        event_min.DrawLine(NoiseWindow.first,meanstd.first.first-NbrSigma * meanstd.first.second,NoiseWindow.second,meanstd.first.first-NbrSigma * meanstd.first.second);
-        event_min.DrawLine(NoiseWindow.first,meanstd.first.first+NbrSigma * meanstd.first.second,NoiseWindow.second,meanstd.first.first+NbrSigma * meanstd.first.second);
+        event_min.DrawLine(NoiseWindow.first*event->Period_ns,meanstd.first.first-NbrSigma * meanstd.first.second,NoiseWindow.second*event->Period_ns,meanstd.first.first-NbrSigma * meanstd.first.second);
+        event_min.DrawLine(NoiseWindow.first*event->Period_ns,meanstd.first.first+NbrSigma * meanstd.first.second,NoiseWindow.second*event->Period_ns,meanstd.first.first+NbrSigma * meanstd.first.second);
 
         //Mean noise after
         event_min.SetLineColor(45);
         event_min.SetLineWidth(2);
         event_min.SetLineStyle(9);
-        event_min.DrawLine(NoiseWindowAfter.first,meanstdAfter.first.first,NoiseWindowAfter.second,meanstdAfter.first.first);
+        event_min.DrawLine(NoiseWindowAfter.first*event->Period_ns,meanstdAfter.first.first,NoiseWindowAfter.second*event->Period_ns,meanstdAfter.first.first);
 
         // N*Sigma noise after
         event_min.SetLineColor(45);
         event_min.SetLineWidth(2);
         event_min.SetLineStyle(8);
-        event_min.DrawLine(NoiseWindowAfter.first,meanstdAfter.first.first-NbrSigmaNoise * meanstdAfter.first.second,NoiseWindowAfter.second,meanstdAfter.first.first-NbrSigmaNoise * meanstdAfter.first.second);
-        event_min.DrawLine(NoiseWindowAfter.first,meanstdAfter.first.first+NbrSigmaNoise * meanstdAfter.first.second,NoiseWindowAfter.second,meanstdAfter.first.first+NbrSigmaNoise * meanstdAfter.first.second);
+        event_min.DrawLine(NoiseWindowAfter.first*event->Period_ns,meanstdAfter.first.first-NbrSigmaNoise * meanstdAfter.first.second,NoiseWindowAfter.second*event->Period_ns,meanstdAfter.first.first-NbrSigmaNoise * meanstdAfter.first.second);
+        event_min.DrawLine(NoiseWindowAfter.first*event->Period_ns,meanstdAfter.first.first+NbrSigmaNoise * meanstdAfter.first.second,NoiseWindowAfter.second*event->Period_ns,meanstdAfter.first.first+NbrSigmaNoise * meanstdAfter.first.second);
     }
 
       // Mean Signal
       event_min.SetLineColor(8);
       event_min.SetLineWidth(2);
       event_min.SetLineStyle(9);
-      event_min.DrawLine(SignalWindow2.first,meanstd.second.first,SignalWindow2.second,meanstd.second.first);
+      event_min.DrawLine(SignalWindow2.first*event->Period_ns,meanstd.second.first,SignalWindow2.second*event->Period_ns,meanstd.second.first);
 
       // Mean Signal -+ N*Sigma noise before
       event_min.SetLineColor(8);
       event_min.SetLineWidth(2);
       event_min.SetLineStyle(8);
-      event_min.DrawLine(SignalWindow2.first, meanstd.second.first-NbrSigma * meanstd.first.second, SignalWindow2.second, meanstd.second.first-NbrSigma * meanstd.first.second);
-      event_min.DrawLine(SignalWindow2.first, meanstd.second.first+NbrSigma * meanstd.first.second, SignalWindow2.second, meanstd.second.first+NbrSigma * meanstd.first.second);
+      event_min.DrawLine(SignalWindow2.first*event->Period_ns, meanstd.second.first-NbrSigma * meanstd.first.second, SignalWindow2.second*event->Period_ns, meanstd.second.first-NbrSigma * meanstd.first.second);
+      event_min.DrawLine(SignalWindow2.first*event->Period_ns, meanstd.second.first+NbrSigma * meanstd.first.second, SignalWindow2.second*event->Period_ns, meanstd.second.first+NbrSigma * meanstd.first.second);
 
       event_min.Draw();
 
@@ -1014,13 +863,13 @@ int main(int argc, char** argv)
       TArrow *ar3{nullptr};
       if(!dontPlotNoiseLines)
       {
-        ar3 = new TArrow(NoiseWindow.first,meanstd.first.first,NoiseWindow.first,meanstd.first.first-NbrSigma * meanstd.first.second,0.005,"<|>");
+        ar3 = new TArrow(NoiseWindow.first*event->Period_ns,meanstd.first.first,NoiseWindow.first*event->Period_ns,meanstd.first.first-NbrSigma * meanstd.first.second,0.005,"<|>");
         ar3->SetAngle(40);
         ar3->SetLineWidth(2);
         ar3->Draw();
       }
 
-      TArrow *ar4 = new TArrow(SignalWindow2.first,meanstd.second.first,SignalWindow2.first,meanstd.second.first-NbrSigma * meanstd.first.second,0.005,"<|>");
+      TArrow *ar4 = new TArrow(SignalWindow2.first*event->Period_ns,meanstd.second.first,SignalWindow2.first*event->Period_ns,meanstd.second.first-NbrSigma * meanstd.first.second,0.005,"<|>");
       ar4->SetAngle(40);
       ar4->SetLineWidth(2);
       ar4->Draw();
@@ -1028,53 +877,26 @@ int main(int argc, char** argv)
       TLatex latex;
       latex.SetTextSize(0.02);
       latex.SetTextAlign(13);  //align at top
-      latex.DrawLatex(SignalWindow2.first+1,meanstd.second.first-NbrSigma * meanstd.first.second/2,(fmt::format("{:02.1f}",NbrSigma)+"#times#sigma_{Noise}").c_str());
+      latex.DrawLatex(SignalWindow2.first+1*event->Period_ns,meanstd.second.first-NbrSigma * meanstd.first.second/2,(fmt::format("{:02.1f}",NbrSigma)+"#times#sigma_{Noise}").c_str());
 
       TLatex latex2;
       latex2.SetTextSize(0.02);
       latex2.SetTextAlign(13);  //align at top
-      latex2.DrawLatex(NoiseWindow.first+1,meanstdAfter.first.first-NbrSigma * meanstd.first.second/2,(fmt::format("{:02.1f}",NbrSigma)+"#times#sigma_{Noise}").c_str());
+      latex2.DrawLatex(NoiseWindow.first+1*event->Period_ns,meanstdAfter.first.first-NbrSigma * meanstd.first.second/2,(fmt::format("{:02.1f}",NbrSigma)+"#times#sigma_{Noise}").c_str());
 
       if(plotIndividualChannels)
       {
-        TCanvas can2("can","can",0,0,1200,800);
         can2.cd();
-        Plots[ch].GetXaxis()->SetLimits(0.,1024*1.0/5);
-        Plots[ch].GetXaxis()->SetRangeUser(0, 1024);
-        double RangeUsermin{min_max_all.first.first*1.05};
-        double RangeUsermax{min_max_all.second.first*1.05};
-        Plots[ch].GetYaxis()->SetRangeUser(RangeUsermin,RangeUsermax);
-        Plots[ch].SetStats();
-        Plots[ch].GetXaxis()->SetTitle("Time (ns)");
-        Plots[ch].GetYaxis()->SetTitle("Amplitude (mV)");
-        //hasseensomething=true;
-        Plots[ch].SetLineColor(16);
-        Plots[ch].SetLineWidth(1);
-        Plots[ch].Draw("HIST");
-        if(hasseensomething == true)
-        {
-          //Signal region
-          //Copy h1 in a clone h1c. Set range and color for h1c
-          TH1F* h1c = static_cast<TH1F*>(Plots[ch].Clone());
-          h1c->SetLineColor(46);//8
-          h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
-          h1c->Draw("HISTsame");
-        }
-        else
-        {
-          TH1F* h1c = static_cast<TH1F*>(Plots[ch].Clone());
-          h1c->SetLineColor(46);//46
-          h1c->GetXaxis()->SetRange(SignalWindow2.first,SignalWindow2.second);
-          h1c->Draw("HISTsame");
-        }
+        eventViewers[channels.getChannel(ch).getOnChamber()].getPlot(realChannel).Draw("HIST");
+        eventViewers[channels.getChannel(ch).getOnChamber()].UnderlineSignalRegion(realChannel,hasseensomething ? 8 : 46,SignalWindow2.first,SignalWindow2.second);
 
         TLine event_min;
         // Signal Region
         event_min.SetLineColor(46);//30
         event_min.SetLineWidth(2);
         event_min.SetLineStyle(10);
-        event_min.DrawLine(SignalWindow2.first*1.0/5,RangeUsermin,SignalWindow2.first*1.0/5,RangeUsermax);
-        event_min.DrawLine(SignalWindow2.second*1.0/5,RangeUsermin,SignalWindow2.second*1.0/5,RangeUsermax);
+        event_min.DrawLine(SignalWindow2.first*event->Period_ns,RangeUsermin,SignalWindow2.first*event->Period_ns,RangeUsermax);
+        event_min.DrawLine(SignalWindow2.second*event->Period_ns,RangeUsermin,SignalWindow2.second*event->Period_ns,RangeUsermax);
 
         if(!dontPlotSignalLines)
         {
@@ -1082,14 +904,14 @@ int main(int argc, char** argv)
           event_min.SetLineColor(8);
           event_min.SetLineWidth(2);
           event_min.SetLineStyle(9);
-          event_min.DrawLine(SignalWindow2.first*1.0/5,meanstd.second.first,SignalWindow2.second*1.0/5,meanstd.second.first);
+          event_min.DrawLine(SignalWindow2.first*event->Period_ns,meanstd.second.first,SignalWindow2.second*event->Period_ns,meanstd.second.first);
 
           // Mean Signal -+ N*Sigma noise before
           event_min.SetLineColor(8);
           event_min.SetLineWidth(2);
           event_min.SetLineStyle(8);
-          event_min.DrawLine(SignalWindow2.first*1.0/5, meanstd.second.first-NbrSigma * meanstd.first.second, SignalWindow2.second*1.0/5, meanstd.second.first-NbrSigma * meanstd.first.second);
-          event_min.DrawLine(SignalWindow2.first*1.0/5, meanstd.second.first+NbrSigma * meanstd.first.second, SignalWindow2.second*1.0/5, meanstd.second.first+NbrSigma * meanstd.first.second);
+          event_min.DrawLine(SignalWindow2.first*event->Period_ns, meanstd.second.first-NbrSigma * meanstd.first.second, SignalWindow2.second*event->Period_ns, meanstd.second.first-NbrSigma * meanstd.first.second);
+          event_min.DrawLine(SignalWindow2.first*event->Period_ns, meanstd.second.first+NbrSigma * meanstd.first.second, SignalWindow2.second*event->Period_ns, meanstd.second.first+NbrSigma * meanstd.first.second);
           TLatex latex;
           latex.SetTextSize(0.02);
           latex.SetTextAlign(13);  //align at top
@@ -1103,7 +925,7 @@ int main(int argc, char** argv)
         {
           ar3->Draw();
         }
-        std::string filename = folder+"/Events"+"/Event"+std::to_string(evt)+"chamber"+std::to_string(channels.getChannel(ch).getOnChamber())+"channel"+std::to_string(ch)+".png";
+        std::string filename = folder+"/Events"+"/Event"+std::to_string(evt)+"chamber"+std::to_string(channels.getChannel(ch).getOnChamber())+"channel"+std::to_string(ch)+".svg";
         can2.SaveAs(filename.c_str());
       }
 
@@ -1139,39 +961,38 @@ int main(int argc, char** argv)
     delta_t_new=delta_t_last;
     Clear();
   }
-
   for(std::map<int,TH1D>::iterator it= ticks_distribution.begin();it!= ticks_distribution.end();++it)
   {
-    can.Clear();
+    can2.Clear();
     it->second.Draw();
-    can.SaveAs((folder+"/Others"+"/Tick_Distribution_"+std::to_string(it->first)+".pdf").c_str(),"Q");
+    can2.SaveAs((folder+"/Others"+"/Tick_Distribution_"+std::to_string(it->first)+".pdf").c_str(),"Q");
   }
   for(auto min : mins)
   {
-    can.Clear();
+    can2.Clear();
     min.second.GetXaxis()->SetNdivisions(510);
     min.second.Draw();
-    can.SaveAs((folder+"/Others"+"/minimum_position_distribution"+std::to_string(min.first)+".pdf").c_str(),"Q");
+    can2.SaveAs((folder+"/Others"+"/minimum_position_distribution"+std::to_string(min.first)+".pdf").c_str(),"Q");
   }
-  can.Clear();
+  can2.Clear();
   total.GetXaxis()->SetNdivisions(510);
   total.Draw();
-  can.SaveAs((folder+"/Others"+"/minimum_position_distribution_total.pdf").c_str(),"Q");
+  can2.SaveAs((folder+"/Others"+"/minimum_position_distribution_total.pdf").c_str(),"Q");
 
-  can.Clear();
+  can2.Clear();
   delta_t.GetXaxis()->SetNdivisions(510);
   delta_t.Draw();
-  can.SaveAs((folder+"/DeltaT.pdf").c_str(),"Q");
+  can2.SaveAs((folder+"/DeltaT.pdf").c_str(),"Q");
 
-  can.Clear();
+  can2.Clear();
   delta_T_not_event.GetXaxis()->SetNdivisions(510);
   delta_T_not_event.Draw();
-  can.SaveAs((folder+"/delta_T_not_event.pdf").c_str(),"Q");
+  can2.SaveAs((folder+"/delta_T_not_event.pdf").c_str(),"Q");
 
-  can.Clear();
+  can2.Clear();
   delta_T_noisy.GetXaxis()->SetNdivisions(510);
   delta_T_noisy.Draw();
-  can.SaveAs((folder+"/delta_T_noisy.pdf").c_str(),"Q");
+  can2.SaveAs((folder+"/delta_T_noisy.pdf").c_str(),"Q");
 
 
 

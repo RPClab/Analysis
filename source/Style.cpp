@@ -3,6 +3,7 @@
 
 void SetStyle()
 {
+  gStyle->SetCanvasPreferGL(true);
   // use plain black on white colors
   Int_t icol=0; // WHITE
   gStyle->SetFrameBorderMode(icol);

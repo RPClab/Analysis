@@ -47,3 +47,11 @@ void BoxedText(const fmt::text_style &ts, const std::string& message)
   "│{1: ^{2}}│\n"
   "└{0:─^{2}}┘\n","", message, width-2);
 }
+
+void CenterXText(const fmt::text_style& style, const std::string& text)
+{
+  static int width{0};
+  static int height{0};
+  get_terminal_size(width, height);
+  fmt::print(style,"{0:^{1}}\n",text,width);
+}
