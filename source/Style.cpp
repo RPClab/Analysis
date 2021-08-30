@@ -3,7 +3,7 @@
 
 void SetStyle()
 {
-  gStyle->SetCanvasPreferGL(true);
+  //gStyle->SetCanvasPreferGL(true);
   // use plain black on white colors
   Int_t icol=0; // WHITE
   gStyle->SetFrameBorderMode(icol);
@@ -16,21 +16,21 @@ void SetStyle()
   //gStyle->SetFillColor(icol); // don't use: white fill color for *all* objects
 
   // set the paper & margin sizes
-  gStyle->SetPaperSize(20,26);
+  gStyle->SetPaperSize(21,29.7);
 
   // set margin sizes
   gStyle->SetPadTopMargin(0.05);
   gStyle->SetPadRightMargin(0.05);
-  gStyle->SetPadBottomMargin(0.16);
-  gStyle->SetPadLeftMargin(0.16);
+  gStyle->SetPadBottomMargin(0.10);
+  gStyle->SetPadLeftMargin(0.10);
 
   // set title offsets (for axis label)
-  gStyle->SetTitleXOffset(1.4);
-  gStyle->SetTitleYOffset(1.4);
+  gStyle->SetTitleXOffset(1.);
+  gStyle->SetTitleYOffset(1.);
 
   // use large fonts
   //Int_t font=72; // Helvetica italics
-  Int_t font=42; // Helvetica
+  Int_t font=22; // Helvetica
   Double_t tsize=0.05;
   gStyle->SetTextFont(font);
 

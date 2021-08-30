@@ -73,7 +73,7 @@ int main(int argc, char** argv)
   {
     canvas.cd();
     //Read the .csv file
-    rapidcsv::Document doc(filenames[file], rapidcsv::LabelParams(0, -1));
+    rapidcsv::Document doc(filenames[file], rapidcsv::LabelParams(0, -1),rapidcsv::SeparatorParams(),rapidcsv::ConverterParams(),rapidcsv::LineReaderParams(true /* pSkipCommentLines */,'#' /* pCommentPrefix */,true /* pSkipEmptyLines */));
     std::vector<float> HVs = doc.GetColumn<float>("HV");
     std::vector<float> efficiencies = doc.GetColumn<float>("Efficiency");
     std::vector<float> errorEfficiencies = doc.GetColumn<float>("Error Efficiency");

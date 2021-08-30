@@ -110,6 +110,17 @@ namespace Analysis
     {
       return Channels.at(id);
     }
+
+    const Analysis::Channel& getChannelByNumber(const std::size_t& num) const
+    {
+      std::map<int,Analysis::Channel>::const_iterator ret=Channels.end();
+      for(std::map<int,Analysis::Channel>::const_iterator it= Channels.begin(); it!=Channels.end(); ++it)
+      {
+        if(it->second.getNumber()==num) ret= it;
+      }
+      return ret->second;
+    }
+
     void print()
     {
       fmt::print("{} channels will be analysed :\n",Channels.size());
@@ -310,12 +321,7 @@ public:
     m_PaveLabel->Draw();
     m_Pad->Draw();
   }
-  ~EventViewer()
-  {
-    if(m_PaveLabel==nullptr) delete m_PaveLabel;
-    if(m_Pad==nullptr) delete m_Pad;
-    if(m_Canvas==nullptr) delete m_Canvas;
-  }
+  ~EventViewer()=default;
   void setPaveLabel(const std::string& title)
   {
     m_PaveLabel->SetLabel(title.c_str());
@@ -356,7 +362,8 @@ public:
   }
   void createWaveForm(const Analysis::Channels& channels,const Channel& channel)
   {
-    int number{channels.getChannel(channel.Group*8+channel.Number).getNumber()};
+    int number{channels.getChannelByNumber(channel.Group*8+channel.Number).getID()};
+    std::cout<<"Creating "<<number<<std::endl;
     m_ChannelPlot[number] = TH1F(("Waveform_"+std::to_string(number)).c_str(),";Time (ns);Signal (mV)", channel.Data.size(), 0, channel.Data.size());
     m_ChannelPlot[number].Clear();
     for(std::size_t i = 0; i != channel.Data.size(); ++i) m_ChannelPlot[number].Fill(i, channel.Data[i]);
@@ -423,20 +430,6 @@ int main(int argc, char** argv)
   ROOT::EnableThreadSafety();
   ROOT::EnableImplicitMT(5);
   std::istringstream Results;
-  rapidcsv::Document documents(Results,rapidcsv::LabelParams(0,-1));
-  std::vector<std::string> line;
-  /*std::string arguments{"#"};
-  line.clear();
-  for(std::size_t i=0;i!=argc;++i)
-  {
-    arguments+=" ";
-    arguments+=argv[i];
-  }
-  line.push_back(arguments);
-  documents.SetRow(-1,line);*/
-
-  line={"HV","Efficiency","Error Efficiency","Efficiency Corrected","Error Efficiency Corrected","Multiplicity"};
-  documents.SetRow(-1,line);
 
   try
   {
@@ -446,66 +439,69 @@ int main(int argc, char** argv)
   CLI::App    app{"Analysis"};
 
   std::string path{"./"};
-  app.add_option("--path", path, "Path where to search the files")->required()->check(CLI::ExistingPath);
+  app.add_option("--path", path, "Path where to search the files.")->required()->check(CLI::ExistingPath);
 
-  std::string save{"./Results.csv"};
-  app.add_option("--saveAs", save, "File to save the results")->required();
+  std::string save{"./Results"};
+  app.add_option("--saveAs", save, "File to save the results.")->required();
 
   //Add CLI::ExistingFile
   std::vector<std::string> files;
-  app.add_option("-f,--files", files, "Name of the file(s) to process")->required();
+  app.add_option("-f,--files", files, "Name of the file(s) to process.")->required();
 
   int NbrEvents{0};
-  app.add_option("-e,--events", NbrEvents, "Number of event to process")->check(CLI::PositiveNumber);
+  app.add_option("-e,--events", NbrEvents, "Number of event to process.")->check(CLI::PositiveNumber);
 
   std::string nameTree{"Tree"};
-  app.add_option("-t,--tree", nameTree, "Name of the TTree");
+  app.add_option("-t,--tree", nameTree, "Name of the TTree.");
 
   std::pair<double, double> SignalWindow;
-  app.add_option("-s,--signal", SignalWindow, "Width of the signal windows, delay between signal and trigger")->required()->type_size(2);
+  app.add_option("-s,--signal", SignalWindow, "Width of the signal windows, delay between signal and trigger.")->required()->type_size(2);
 
   std::pair<double, double> NoiseWindow;
-  app.add_option("-n,--noise", NoiseWindow, "Noise window")->required()->type_size(2);
+  app.add_option("-n,--noise", NoiseWindow, "Noise window.")->required()->type_size(2);
 
   std::pair<double, double> NoiseWindowAfter;
-  app.add_option("--noiseAfter", NoiseWindowAfter, "Noise window after")->required()->type_size(2);
+  app.add_option("--noiseAfter", NoiseWindowAfter, "Noise window after.")->required()->type_size(2);
 
   double NbrSigmaNoise{5.0};
-  app.add_option("--sigmaNoise", NbrSigmaNoise, "NbrSigmaNoise");
+  app.add_option("--sigmaNoise", NbrSigmaNoise, "NbrSigmaNoise.");
 
   int NumberChambers{0};
-  app.add_option("-c,--chambers", NumberChambers, "Number of chamber(s)")->check(CLI::PositiveNumber)->required();
+  app.add_option("-c,--chambers", NumberChambers, "Number of chamber(s).")->check(CLI::PositiveNumber)->required();
 
   //From MaftyNaveyuErin
   //By default we used only 8 channels so keep this behaviour
   std::vector<int> analysedchannels{0,1,2,3,4,5,6,7};
-  app.add_option("--analysed", analysedchannels,"Channels want to be analysed");
+  app.add_option("--analysed", analysedchannels,"Channels want to be analysed.");
 
   //By defaut all 8 channels are in one chamber
   std::vector<int> distribution{0,0,0,0,0,0,0,0};
-  app.add_option("-d,--distribution", distribution, "Channel is in wich chamber start at 0 and -1 if not connected")->required();
+  app.add_option("-d,--distribution", distribution, "Channel is in wich chamber start at 0 and -1 if not connected.")->required();
 
   //By defaut all 8 channels have Negative polarity
   std::vector<int> polarity{-1,-1,-1,-1,-1,-1,-1,-1};
-  app.add_option("-p,--polarity", polarity, "Polarity of the signal Positive,+,Negative,-")->required();
+  app.add_option("-p,--polarity", polarity, "Polarity of the signal Positive,+,Negative,-.")->required();
 
   std::vector<int> triggers{8,17,26,35};
-  app.add_option("--triggers", triggers, "Channels used as trigger 8,17,26,35 by default");
+  app.add_option("--triggers", triggers, "Channels used as trigger 8,17,26,35 by default.");
 
   bool PlotTriggers{true};
-  app.add_option("--plot_triggers", PlotTriggers, "Plot the triggers");
+  app.add_option("--plot_triggers", PlotTriggers, "Plot the triggers.");
 
   double NbrSigma{5.0};
-  app.add_option("--sigma", NbrSigma, "Number of sigma above the mean noise");
+  app.add_option("--sigma", NbrSigma, "Number of sigma above the mean noise.");
 
   bool dontPlotNoiseLines{false};
-  app.add_option("--dontPlotNoiseLines", dontPlotNoiseLines,"Disable the Noise Lines on the plots");
+  app.add_option("--dontPlotNoiseLines", dontPlotNoiseLines,"Disable the Noise Lines on the plots.");
 
   bool dontPlotSignalLines{false};
-  app.add_option("--dontPlotSignalLines", dontPlotSignalLines,"Disable the Signal Lines on the plots (mean and RMS)");
+  app.add_option("--dontPlotSignalLines", dontPlotSignalLines,"Disable the Signal Lines on the plots (mean and RMS).");
 
   bool plotIndividualChannels{false};
-  app.add_option("--plotIndividualChannels", plotIndividualChannels,"Plot each channel individually");
+  app.add_option("--plotIndividualChannels", plotIndividualChannels,"Plot each channel individually.");
+
+  double scalefactor{1.0};
+  app.add_option("--scaleFactor", plotIndividualChannels,"Factor to divide the multiplicity.");
 
   try
   {
@@ -514,6 +510,28 @@ int main(int argc, char** argv)
   catch(const CLI::ParseError& e)
   {
     return app.exit(e);
+  }
+  std::vector<std::string> line;
+  /*std::string arguments{"#"};
+   l ine.clear();             *                                                                                            *
+   for(std::size_t i=0;i!=argc;++i)
+   {
+   arguments+=" ";
+   arguments+=argv[i];
+  }
+  line.push_back(arguments);
+  documents.SetRow(-1,line);*/
+
+  line={"HV","Efficiency","Error Efficiency","Efficiency Corrected","Error Efficiency Corrected","Multiplicity"};
+  std::vector<rapidcsv::Document> documents;
+  std::vector<std::istringstream> Results;
+  std::vector<int> Indexes;
+  for(std::size_t i =0 ;i!=NumberChambers;++i)
+  {
+    Indexes.push_back(0);
+    Results.push_back(std::istringstream());
+    documents.push_back(rapidcsv::Document(Results[i],rapidcsv::LabelParams(0,-1)));
+    documents[i].SetRow(-1,line);
   }
 
   std::size_t found = path.find_last_of("/\\");
@@ -541,6 +559,13 @@ int main(int argc, char** argv)
 
   channels.print();
 
+  std::map<int,EventViewer> eventViewers;
+  //Create the graph for chambers
+  for(std::size_t i=0;i!=NumberChambers;++i)
+  {
+    eventViewers[i]=EventViewer();
+    eventViewers[i].divide(channels.getNumberChannelActivatedForChamber(i));
+  }
 
   TCanvas can2("","",0,0,800,600);
   for(std::size_t file=0;file!=path_file.size();++file)
@@ -563,13 +588,7 @@ int main(int argc, char** argv)
 
   if(PlotTriggers) fs::create_directories(folder+"/Triggers");
   //Map for TGraph
-  std::map<int,EventViewer> eventViewers;
-  //Create the graph for chambers
-  for(std::size_t i=0;i!=NumberChambers;++i)
-  {
-    eventViewers[i]=EventViewer();
-    eventViewers[i].divide(channels.getNumberChannelActivatedForChamber(i));
-  }
+
 
   //Keep the ticks of each triggers
   std::map<int,int> trigger_ticks;
@@ -579,8 +598,6 @@ int main(int argc, char** argv)
     trigger_ticks[triggers[i]]=0;
     ticks_distribution[triggers[i]]=TH1D("Tick Distribution","Tick Distribution",1024,0,1024);
   }
-
-
 
   TTree* Run{nullptr};
   try
@@ -601,39 +618,33 @@ int main(int argc, char** argv)
     continue;
   }
 
-  double   scalefactor = 1.0;
-
   std::map<int,TH1D> mins;
   for(auto channel : channels.get())
   {
     mins[channel.first]=TH1D("min position distribution","min position distribution",1024,0,1024);
   }
 
-
-  Long64_t NEntries = Run->GetEntries();
-  NbrEvents         = NbrEventToProcess(NbrEvents, NEntries);
+  NbrEvents={NbrEventToProcess(NbrEvents,Run->GetEntries())};
   //channels.print();
   Event* event{nullptr};
-  int    good_stack{0};
-  int    good_stack_corrected{0};
-  bool   good = false;
+
   bool   hasseensomething{false};
   if(Run->SetBranchAddress("Events", &event))
   {
     throw std::runtime_error("Error while SetBranchAddress !!!");
   }
 
-
-  // std::vector<TH1D> Verif;
-  std::map<int, int> Efficiency;
-
-
   // Initialize multiplicity
   std::vector<float> Multiplicity;
-
+  std::vector<int> goodStack;
+  std::vector<int> goodStackCorrected;
+  std::vector<bool> goods;
   for(std::size_t i=0;i!=NumberChambers;++i)
   {
     Multiplicity.push_back(0.);
+    goodStack.push_back(0.);
+    goodStackCorrected.push_back(0.);
+    goods.push_back(false);
   }
 
 
@@ -723,22 +734,18 @@ int main(int argc, char** argv)
 
       BoxedText(fg(fmt::color::white) | fmt::emphasis::bold,fmt::format("Channel {}",channels.getChannel(ch).getNumber()));
 
-      if(evt == 0) Efficiency[ch] = 0;
       double max=getAbsMax(event->Channels[ch]);
-      int realChannel=channels.getChannel(ch).getNumber();
+      int realChannel=channels.getChannelByNumber(channels.getChannel(ch).getNumber()).getID();
+
+      std::cout<<"************"<<ch<<"  "<<realChannel<<"***********";
       eventViewers[channels.getChannel(ch).getOnChamber()].createWaveForm(channels,event->Channels[ch]);
       double RangeUsermin{MinMaxChamber[channels.getChannel(ch).getOnChamber()].first*1.05};
       double RangeUsermax{MinMaxChamber[channels.getChannel(ch).getOnChamber()].second*1.05};
       eventViewers[channels.getChannel(ch).getOnChamber()].getPlot(realChannel).GetYaxis()->SetRangeUser(RangeUsermin,RangeUsermax);
       eventViewers[channels.getChannel(ch).getOnChamber()].getPlot(realChannel).Draw("HIST");
 
-
-
       ///BAD PLEASE FIX THIS !!!
       std::pair<int,int> SignalWindow2;
-
-
-
       SignalWindow2.first=trigger_ticks[findWichTrigger(ch,triggers)]-SignalWindow.second-SignalWindow.first/2;
       SignalWindow2.second=trigger_ticks[findWichTrigger(ch,triggers)]-SignalWindow.second+SignalWindow.first/2;
       std::pair<std::pair<double, double>, std::pair<double, double>> meanstd  = MeanSTD(event->Channels[ch], SignalWindow2, NoiseWindow);
@@ -773,20 +780,8 @@ int main(int argc, char** argv)
       CenterXText(hasseensomething ? fg(fmt::color::green) : fg(fmt::color::red) | fmt::emphasis::bold,fmt::format("Mean signal region : {:05.4f}+-{:05.4f} min = {:05.4f}, Mean noise region : {:05.4f}+-{:05.4f}, Selection criteria {:05.4f} sigmas ({:05.4f}), Condition to fullfill {:05.4f}>{:05.4f}",meanstd.second.first,meanstd.second.second,min_max.first.first,meanstd.first.first,meanstd.first.second,NbrSigma,NbrSigma * meanstd.first.second,(min_max.first.first-meanstd.first.first)*channels.getChannel(ch).getSignPolarity(),NbrSigma * meanstd.first.second));
       if(hasseensomething == true)
       {
-        good = true;
+        goods[channels.getChannel(ch).getOnChamber()] =true;
         Multiplicity[channels.getChannel(ch).getOnChamber()]++;
-      }
-      if(ch==channels.getNumberChannels()-1)
-      {
-       // Plots[ch].GetXaxis()->SetLabelOffset(0.02);
-       // Plots[ch].GetYaxis()->SetLabelSize(0.02);
-      }
-      else
-      {
-          //Plots[ch].GetXaxis()->SetTitleOffset(0.);
-          //Plots[ch].GetXaxis()->SetLabelSize(0.);
-      //  Plots[ch].GetXaxis()->SetTitleSize(0.);
-        //Plots[ch].GetXaxis()->SetTitleSize(0.);
       }
 
       TLine event_min;
@@ -888,6 +883,7 @@ int main(int argc, char** argv)
       {
         can2.cd();
         eventViewers[channels.getChannel(ch).getOnChamber()].getPlot(realChannel).Draw("HIST");
+        eventViewers[channels.getChannel(ch).getOnChamber()].getPlot(realChannel).GetYaxis()->SetRangeUser(min_max_all.first.first*1.05,min_max_all.second.first*1.05);
         eventViewers[channels.getChannel(ch).getOnChamber()].UnderlineSignalRegion(realChannel,hasseensomething ? 8 : 46,SignalWindow2.first,SignalWindow2.second);
 
         TLine event_min;
@@ -925,7 +921,7 @@ int main(int argc, char** argv)
         {
           ar3->Draw();
         }
-        std::string filename = folder+"/Events"+"/Event"+std::to_string(evt)+"chamber"+std::to_string(channels.getChannel(ch).getOnChamber())+"channel"+std::to_string(ch)+".svg";
+        std::string filename = folder+"/Events"+"/Event"+std::to_string(evt)+"chamber"+std::to_string(channels.getChannel(ch).getOnChamber())+"channel"+std::to_string(ch)+".png";
         can2.SaveAs(filename.c_str());
       }
 
@@ -937,22 +933,24 @@ int main(int argc, char** argv)
       it->second.saveAs(filename.c_str());
     }
 
-    if(good == true)
+    for(std::size_t nub =0 ;nub!=goods.size();++nub)
     {
-      if(event_skip2!=evt)
+      if(goods[nub] == true)
       {
-        good_stack_corrected++;
+        if(event_skip2!=evt)
+        {
+          goodStackCorrected[nub]++;
 
+        }
+        goodStack[nub]++;
+        goods[nub] = false;
       }
-      good_stack++;
-      good = false;
-      //hasseensomething=true;
+      else
+      {
+        delta_T_not_event.Fill((delta_t_new-delta_t_last)*8.5e-9);
+      }
+    }
 
-    }
-    else
-    {
-      delta_T_not_event.Fill((delta_t_new-delta_t_last)*8.5e-9);
-    }
 
     if(event_skip2!=evt)
     {
@@ -995,37 +993,40 @@ int main(int argc, char** argv)
   can2.SaveAs((folder+"/delta_T_noisy.pdf").c_str(),"Q");
 
 
+  for(std::size_t chamber = 0; chamber != NumberChambers ; ++chamber)
+  {
+    float efficiency=goodStack[chamber] * 1.00 / (NbrEvents * scalefactor);
+    float efficiency_corrected=goodStackCorrected[chamber] * 1.00 / (total_event * scalefactor);
+    std::cout << "Chamber efficiency " << efficiency << " +-" <<std::sqrt(efficiency*(1-efficiency)/NbrEvents)<<" with signal "<<goodStack[chamber]<<" total event "<< NbrEvents<<" Multiplicity"<< Multiplicity[chamber]/goodStack[chamber]<< std::endl;
+    std::cout << "Chamber efficiency corrected " << efficiency_corrected << " +-" <<std::sqrt(efficiency_corrected*(1-efficiency_corrected)/total_event)<<" with signal "<<goodStackCorrected[chamber]<<" total event "<< total_event <<std::endl;
 
-  float efficiency=good_stack * 1.00 / (NbrEvents * scalefactor);
-  float efficiency_corrected=good_stack_corrected * 1.00 / (total_event * scalefactor);
-  std::cout << "Chamber efficiency " << efficiency << " +-" <<std::sqrt(efficiency*(1-efficiency)/NbrEvents)<<" with signal "<<good_stack<<" total event "<< NbrEvents<<" Multiplicity"<< Multiplicity[0]/good_stack<< std::endl;
-  std::cout << "Chamber efficiency corrected " << efficiency_corrected << " +-" <<std::sqrt(efficiency_corrected*(1-efficiency_corrected)/total_event)<<" with signal "<<good_stack_corrected<<" total event "<< total_event <<std::endl;
+    std::cout<< "Number event analysed " << total_event*100.0/NbrEvents <<std::endl;
 
-  std::cout<< "Number event analysed " << total_event*100.0/NbrEvents <<std::endl;
+    std::vector<float> line;
+    std::string value;
+    std::size_t found = files[file].find("V.root");
+    std::string HV = files[file].substr(0,found);
+    line.push_back(std::stof(HV));
+    line.push_back(efficiency);
+    line.push_back(std::sqrt(efficiency*(1-efficiency)/NbrEvents));
+    line.push_back(efficiency_corrected);
+    line.push_back(std::sqrt(efficiency_corrected*(1-efficiency_corrected)/total_event));
+    line.push_back(Multiplicity[chamber]/goodStack[chamber]);
 
-  static int index{0};
-  std::vector<float> line;
-  std::string value;
-  std::size_t found = files[file].find("V.root");
-  std::string HV = files[file].substr(0,found);
-
-  line.push_back(std::stof(HV));
-  line.push_back(efficiency);
-  line.push_back(std::sqrt(efficiency*(1-efficiency)/NbrEvents));
-  line.push_back(efficiency_corrected);
-  line.push_back(std::sqrt(efficiency_corrected*(1-efficiency_corrected)/total_event));
-  line.push_back(Multiplicity[0]/good_stack);
-
-  documents.SetRow(index,line);
-  ++index;
-
-
+    documents[chamber].SetRow(Indexes[chamber],line);
+    Indexes[chamber]++;
+  }
   if(event != nullptr) delete event;
   if(Run != nullptr) delete Run;
   if(fileIn.IsOpen()) fileIn.Close();
-  }
-  documents.Save(save.c_str());
 
+
+  for(std::size_t document=0; document!=documents.size();++document)
+  {
+    documents[document].Save((save+"_Chamber"+std::to_string(document)+".csv").c_str());
+  }
+
+  }
   }
   catch(const std::exception& e)
   {
